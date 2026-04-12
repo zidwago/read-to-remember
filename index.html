@@ -1754,6 +1754,8 @@
   });
 
   entriesList.addEventListener("click", async function (ev) {
+    // Ignore clicks originating from the color swatch — it handles itself
+    if (ev.target.closest(".entry-color-swatch")) return;
     const btn = ev.target.closest(".entry-edit-btn");
     if (!btn) return;
     const _all = await loadEntries(); const entry = _all.find(function (e) { return e.id === btn.getAttribute("data-entry-id"); });
@@ -2250,10 +2252,12 @@
     _popoverOnChange = null;
   }
 
-  // Close on outside click — stopPropagation on popover keeps it open on internal clicks
+  // Close popover only when clicking outside it and outside the swatch
   colorPopoverEl.addEventListener("click", function (ev) { ev.stopPropagation(); });
   document.addEventListener("click", function (ev) {
-    if (!colorPopoverEl.hasAttribute("hidden")) closeColorPopover();
+    if (colorPopoverEl.hasAttribute("hidden")) return;
+    if (ev.target.closest(".entry-color-swatch") || ev.target.closest(".color-popover")) return;
+    closeColorPopover();
   });
 
   async function applyEntryColor(entryId, colorHex, onChange) {
