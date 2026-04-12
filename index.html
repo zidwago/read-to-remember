@@ -2254,17 +2254,22 @@
   });
 
   async function applyEntryColor(entryId, colorHex, onChange) {
-    if (!entryId) return;                          // guard: null entryId means popover was already closed
+    console.log("applyEntryColor called", entryId, colorHex);
+    if (!entryId) { console.warn("applyEntryColor: no entryId"); return; }
     const entries = await loadEntries();
+    console.log("entries loaded:", entries.length);
     const idx = entries.findIndex(function (en) { return en.id === entryId; });
-    if (idx === -1) return;
+    console.log("entry idx:", idx);
+    if (idx === -1) { console.warn("applyEntryColor: entry not found"); return; }
     if (colorHex) { entries[idx].customColor = colorHex; }
     else          { delete entries[idx].customColor; }
     entries[idx].updatedAt = new Date().toISOString();
+    console.log("upserting entry with color:", entries[idx].customColor);
     await upsertEntry(entries[idx]);
     if (onChange) onChange(colorHex);
     buildTimeline();
     await refreshList();
+    console.log("applyEntryColor done");
   }
 
   // Rebuild on resize
