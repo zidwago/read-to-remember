@@ -124,6 +124,17 @@
     .year-range-label { font-size:0.65rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--muted); margin-bottom:0.3rem; display:block; opacity:0.7; }
     .year-range-hint  { font-size:0.72rem; color:var(--muted); margin-top:0.3rem; opacity:0.75; line-height:1.35; }
 
+    /* Subject coords: start input + end hybrid side by side */
+    .subject-coords-wrap { display:grid; grid-template-columns:1fr 1fr; gap:0.4rem; margin-top:0.4rem; }
+    .subject-coords-wrap > input[type="number"] {
+      width:100%; padding:0.35rem 0.5rem; font-family:var(--font-body); font-size:0.82rem;
+      color:var(--muted); background:var(--bg); border:1px solid var(--border); border-radius:5px;
+      -moz-appearance:textfield;
+    }
+    .subject-coords-wrap > input[type="number"]::-webkit-inner-spin-button,
+    .subject-coords-wrap > input[type="number"]::-webkit-outer-spin-button { -webkit-appearance:none; }
+    .subject-coords-wrap > input[type="number"]:focus { outline:none; border-color:var(--accent); color:var(--text); }
+
     /* Subject-end hybrid control */
     .subject-end-wrap { display:grid; grid-template-columns:auto 1fr; gap:0.4rem; align-items:center; }
     .subject-end-wrap select {
@@ -519,15 +530,15 @@
           </label>
           <input type="text" id="edit-subject-period" autocomplete="off" placeholder="The era it thinks with" />
           <span class="year-range-label" style="margin-top:0.45rem;">Timeline coordinates — BCE as negative</span>
-          <div class="year-range-inputs">
+          <div class="subject-coords-wrap">
             <input type="number" id="edit-subject-start" placeholder="Start year" title="Subject period start year (BCE = negative)" />
             <div class="subject-end-wrap">
-            <select id="edit-subject-end-mode" title="Choose year or present">
-              <option value="year">Year</option>
-              <option value="present">Present</option>
-            </select>
-            <input type="number" id="edit-subject-end" placeholder="End year" title="Subject period end year (BCE = negative)" />
-          </div>
+              <select id="edit-subject-end-mode" title="Choose year or present">
+                <option value="year">Year</option>
+                <option value="present">Present</option>
+              </select>
+              <input type="number" id="edit-subject-end" placeholder="End year" title="Subject period end year (BCE = negative)" />
+            </div>
           </div>
         </div>
         <div class="field ai-tags-field">
@@ -597,15 +608,15 @@
           <label for="ai-subject-period" class="with-dot"><span class="temporal-dot temporal-dot--subject"></span>Subject period</label>
           <input type="text" id="ai-subject-period" autocomplete="off" placeholder="The era it thinks with" />
           <span class="year-range-label" style="margin-top:0.45rem;">Timeline coordinates — BCE as negative</span>
-          <div class="year-range-inputs">
+          <div class="subject-coords-wrap">
             <input type="number" id="ai-subject-start" placeholder="Start year" title="Subject period start year (BCE = negative)" />
             <div class="subject-end-wrap">
-            <select id="ai-subject-end-mode" title="Choose year or present">
-              <option value="year">Year</option>
-              <option value="present">Present</option>
-            </select>
-            <input type="number" id="ai-subject-end" placeholder="End year" title="Subject period end year (BCE = negative)" />
-          </div>
+              <select id="ai-subject-end-mode" title="Choose year or present">
+                <option value="year">Year</option>
+                <option value="present">Present</option>
+              </select>
+              <input type="number" id="ai-subject-end" placeholder="End year" title="Subject period end year (BCE = negative)" />
+            </div>
           </div>
         </div>
       </div>
