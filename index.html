@@ -655,7 +655,14 @@
   const SUPABASE_URL     = "https://caoqidivxhpfcaeymtsj.supabase.co";
   const SUPABASE_ANON    = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNhb3FpZGl2eGhwZmNhZXltdHNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMDgyMzgsImV4cCI6MjA5MTU4NDIzOH0.uwZURwfdytVDw1hco3hR7w2UeN4keN4gk1l7oJKRjno";
 
-  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
+    auth: {
+      storageKey: "rtr-auth",          // unique key avoids clashing with other tabs
+      lock: async function (name, acquireTimeout, fn) {
+        return fn();                   // disable Web Locks API — avoids lock contention entirely
+      },
+    }
+  });
   let currentUser = null;   // set after auth
   const ANTHROPIC_URL    = "https://api.anthropic.com/v1/messages";
   const ANTHROPIC_MODEL  = "claude-sonnet-4-20250514";
@@ -843,7 +850,6 @@
 
   async function loadEntries() {
     if (!currentUser) {
-      // fallback: read from localStorage (pre-login or migration)
       try {
         const raw = localStorage.getItem(STORAGE_KEY);
         if (!raw) return [];
@@ -851,12 +857,19 @@
         return Array.isArray(p) ? p : [];
       } catch { return []; }
     }
-    const { data, error } = await sb.from("entries")
-      .select("data")
-      .eq("user_id", currentUser.id)
-      .order("created_at", { ascending: false });
-    if (error) { console.error("loadEntries:", error); return []; }
-    return (data || []).map(function (row) { return row.data; });
+    // Retry up to 3 times to handle transient lock errors
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const { data, error } = await sb.from("entries")
+        .select("data")
+        .eq("user_id", currentUser.id)
+        .order("created_at", { ascending: false });
+      if (!error) {
+        return (data || []).map(function (row) { return row.data; });
+      }
+      console.warn("loadEntries attempt", attempt + 1, error.message);
+      if (attempt < 2) await new Promise(function (r) { setTimeout(r, 600); });
+    }
+    return [];
   }
 
   async function saveEntries(entries) {
