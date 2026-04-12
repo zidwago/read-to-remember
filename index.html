@@ -959,13 +959,18 @@
     const modeSel = document.getElementById(modeSelId);
     const numInp  = document.getElementById(numInputId);
     if (!modeSel || !numInp) return;
-    modeSel.addEventListener("change", function () {
+    // Remove any existing listener before adding (safe to call multiple times)
+    const handler = function () {
       numInp.hidden = modeSel.value === "present";
       if (modeSel.value === "present") numInp.value = "";
-    });
+    };
+    modeSel.removeEventListener("change", modeSel._subjectEndHandler);
+    modeSel._subjectEndHandler = handler;
+    modeSel.addEventListener("change", handler);
   }
-  wireSubjectEndControl("edit-subject-end-mode", "edit-subject-end");
-  wireSubjectEndControl("ai-subject-end-mode",   "ai-subject-end");
+  // Wire AI confirm panel control on page load (always in DOM)
+  wireSubjectEndControl("ai-subject-end-mode", "ai-subject-end");
+  // Edit control is wired inside loadEntryForEditing (only exists when edit section is open)
 
   // ── API key modal ─────────────────────────────────────────────────────────
   if (!sessionStorage.getItem(SESSION_API_KEY)) {
@@ -1438,6 +1443,7 @@
 
     editIndicator.hidden = false; editIndicatorTitle.textContent = str(entry.title);
     editSection.hidden = false;
+    wireSubjectEndControl("edit-subject-end-mode", "edit-subject-end");  // wire now that control is visible
     editSubjectPeriodInput.value = str(entry.subjectPeriod);
     setNumInput(editSubjectStart, entry.subjectStart !== undefined ? entry.subjectStart : null);
     setSubjectEnd("edit-subject-end-mode", "edit-subject-end", entry.subjectEnd !== undefined ? entry.subjectEnd : null);
