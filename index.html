@@ -124,6 +124,25 @@
     .year-range-label { font-size:0.65rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--muted); margin-bottom:0.3rem; display:block; opacity:0.7; }
     .year-range-hint  { font-size:0.72rem; color:var(--muted); margin-top:0.3rem; opacity:0.75; line-height:1.35; }
 
+    /* Subject-end hybrid control */
+    .subject-end-wrap { display:grid; grid-template-columns:auto 1fr; gap:0.4rem; align-items:center; }
+    .subject-end-wrap select {
+      padding:0.35rem 1.6rem 0.35rem 0.5rem; font-family:var(--font-body); font-size:0.82rem;
+      color:var(--muted); background:var(--bg); border:1px solid var(--border); border-radius:5px;
+      cursor:pointer; appearance:none;
+      background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 12 12'%3E%3Cpath fill='%238b909e' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+      background-repeat:no-repeat; background-position:right 0.45rem center;
+    }
+    .subject-end-wrap select:focus { outline:none; border-color:var(--accent); color:var(--text); }
+    .subject-end-wrap input[type="number"] {
+      width:100%; padding:0.35rem 0.5rem; font-family:var(--font-body); font-size:0.82rem;
+      color:var(--muted); background:var(--bg); border:1px solid var(--border); border-radius:5px;
+      -moz-appearance:textfield;
+    }
+    .subject-end-wrap input[type="number"]::-webkit-inner-spin-button,
+    .subject-end-wrap input[type="number"]::-webkit-outer-spin-button { -webkit-appearance:none; }
+    .subject-end-wrap input[type="number"]:focus { outline:none; border-color:var(--accent); color:var(--text); }
+
     /* ── Subject tags ── */
     .entry-subject-heading { margin-top:0.5rem; margin-bottom:0.35rem; font-weight:600; letter-spacing:0.02em; }
     .entry-subject-tags { margin-top:0.15rem; }
@@ -502,7 +521,13 @@
           <span class="year-range-label" style="margin-top:0.45rem;">Timeline coordinates — BCE as negative</span>
           <div class="year-range-inputs">
             <input type="number" id="edit-subject-start" placeholder="Start year" title="Subject period start year (BCE = negative)" />
-            <input type="text"   id="edit-subject-end"   placeholder="End year or &quot;present&quot;" title="Subject period end year (BCE = negative) or type 'present' for ongoing" />
+            <div class="subject-end-wrap">
+            <select id="edit-subject-end-mode" title="Choose year or present">
+              <option value="year">Year</option>
+              <option value="present">Present</option>
+            </select>
+            <input type="number" id="edit-subject-end" placeholder="End year" title="Subject period end year (BCE = negative)" />
+          </div>
           </div>
         </div>
         <div class="field ai-tags-field">
@@ -574,7 +599,13 @@
           <span class="year-range-label" style="margin-top:0.45rem;">Timeline coordinates — BCE as negative</span>
           <div class="year-range-inputs">
             <input type="number" id="ai-subject-start" placeholder="Start year" title="Subject period start year (BCE = negative)" />
-            <input type="text"   id="ai-subject-end"   placeholder="End year or &quot;present&quot;" title="Subject period end year (BCE = negative) or type 'present' for ongoing" />
+            <div class="subject-end-wrap">
+            <select id="ai-subject-end-mode" title="Choose year or present">
+              <option value="year">Year</option>
+              <option value="present">Present</option>
+            </select>
+            <input type="number" id="ai-subject-end" placeholder="End year" title="Subject period end year (BCE = negative)" />
+          </div>
           </div>
         </div>
       </div>
@@ -923,6 +954,19 @@
     } catch (e) { console.error("migrateLocalEntries:", e); }
   }
 
+  // ── Subject-end hybrid controls ─────────────────────────────────────────────
+  function wireSubjectEndControl(modeSelId, numInputId) {
+    const modeSel = document.getElementById(modeSelId);
+    const numInp  = document.getElementById(numInputId);
+    if (!modeSel || !numInp) return;
+    modeSel.addEventListener("change", function () {
+      numInp.hidden = modeSel.value === "present";
+      if (modeSel.value === "present") numInp.value = "";
+    });
+  }
+  wireSubjectEndControl("edit-subject-end-mode", "edit-subject-end");
+  wireSubjectEndControl("ai-subject-end-mode",   "ai-subject-end");
+
   // ── API key modal ─────────────────────────────────────────────────────────
   if (!sessionStorage.getItem(SESSION_API_KEY)) {
     apiKeyModal.removeAttribute("hidden");
@@ -1161,6 +1205,8 @@
     formSubjectTagsRows.innerHTML = ""; editSubjectPeriodInput.value = "";
     if (editSubjectStart)  editSubjectStart.value  = "";
     if (editSubjectEnd)    editSubjectEnd.value    = "";
+    const _esm = document.getElementById("edit-subject-end-mode");
+    if (_esm) { _esm.value = "year"; editSubjectEnd.hidden = false; }
     if (editComposedYear)  editComposedYear.value  = "";
     marginaliaRows.innerHTML = "";
     submitBtn.disabled = false; submitBtn.textContent = SUBMIT_DEFAULT_LABEL;
@@ -1228,6 +1274,30 @@
     return isNaN(n) ? null : n;
   }
 
+  /** Read subject end from a hybrid mode-select + number-input pair. */
+  function getSubjectEnd(modeSelId, numInputId) {
+    const modeSel = document.getElementById(modeSelId);
+    const numInp  = document.getElementById(numInputId);
+    if (modeSel && modeSel.value === "present") return "present";
+    return getNumInput(numInp);
+  }
+
+  /** Set a hybrid subject-end control from a stored value (int, null, or "present"). */
+  function setSubjectEnd(modeSelId, numInputId, val) {
+    const modeSel = document.getElementById(modeSelId);
+    const numInp  = document.getElementById(numInputId);
+    if (!modeSel || !numInp) return;
+    if (isPresent(val)) {
+      modeSel.value = "present";
+      numInp.hidden = true;
+      numInp.value  = "";
+    } else {
+      modeSel.value = "year";
+      numInp.hidden = false;
+      setNumInput(numInp, val);
+    }
+  }
+
   /** Resolve a subjectEnd value to a plot coordinate — "present" becomes current year. */
   function resolveSubjectEnd(val) {
     if (isPresent(val)) return new Date().getFullYear();
@@ -1266,12 +1336,10 @@
     setNumInput(aiSubjectStart, nullableInt(parsed.subjectStart));
     // Handle "present" for subject end
     const rawSubjectEnd = parsed.subjectEnd;
-    if (rawSubjectEnd !== null && rawSubjectEnd !== undefined &&
-        String(rawSubjectEnd).toLowerCase().trim() === "present") {
-      if (aiSubjectEnd) aiSubjectEnd.value = "present";
-    } else {
-      setNumInput(aiSubjectEnd, nullableInt(rawSubjectEnd));
-    }
+    const subjectEndVal = (rawSubjectEnd !== null && rawSubjectEnd !== undefined &&
+        String(rawSubjectEnd).toLowerCase().trim() === "present")
+      ? "present" : nullableInt(rawSubjectEnd);
+    setSubjectEnd("ai-subject-end-mode", "ai-subject-end", subjectEndVal);
     renderTagEditor(normalizeSubjectTagsFromAi(parsed), aiSubjectTagsRows);
   }
 
@@ -1299,7 +1367,7 @@
       journalYear:          isArticle ? str(aiJournalYear.value)   : "",
       subjectPeriod:        str(aiSubjectPeriod.value),
       subjectStart:         getNumInput(aiSubjectStart),
-      subjectEnd:           getNumInput(aiSubjectEnd),
+      subjectEnd:           getSubjectEnd("ai-subject-end-mode", "ai-subject-end"),
       subjectTags:          collectTagsFromContainer(aiSubjectTagsRows),
       generalNotes:         s.generalNotes,
       marginalia:           existingMarginalia,
@@ -1372,7 +1440,7 @@
     editSection.hidden = false;
     editSubjectPeriodInput.value = str(entry.subjectPeriod);
     setNumInput(editSubjectStart, entry.subjectStart !== undefined ? entry.subjectStart : null);
-    setNumInput(editSubjectEnd,   entry.subjectEnd   !== undefined ? entry.subjectEnd   : null);
+    setSubjectEnd("edit-subject-end-mode", "edit-subject-end", entry.subjectEnd !== undefined ? entry.subjectEnd : null);
     setNumInput(editComposedYear, entry.composedStart !== undefined ? entry.composedStart : null);
     renderTagEditor(entry.subjectTags || [], formSubjectTagsRows);
     renderMarginaliaEditor(entry.marginalia || [], marginaliaRows);
@@ -1616,7 +1684,7 @@
         journalNumber: isArticle ? snapshot.journalNumber : "", journalYear: isArticle ? snapshot.journalYear : "",
         subjectPeriod:  str(editSubjectPeriodInput.value),
         subjectStart:   getNumInput(editSubjectStart),
-        subjectEnd:     getNumInput(editSubjectEnd),
+        subjectEnd:     getSubjectEnd("edit-subject-end-mode", "edit-subject-end"),
         subjectTags:    collectTagsFromContainer(formSubjectTagsRows),
         generalNotes:   snapshot.generalNotes,
         marginalia:     collectMarginaliaFromContainer(marginaliaRows),
