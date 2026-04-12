@@ -259,17 +259,46 @@
 
     /* ── Entry color swatch ── */
     .entry-color-swatch {
-      width: 16px; height: 16px; border-radius: 50%;
-      border: 2px solid rgba(255,255,255,0.15);
+      width: 18px; height: 18px; border-radius: 50%;
+      border: 2px solid var(--border);
       cursor: pointer; flex-shrink: 0;
       transition: transform 0.15s, border-color 0.15s;
-      position: relative;
+      position: relative; display: inline-block;
     }
-    .entry-color-swatch:hover { transform: scale(1.2); border-color: rgba(255,255,255,0.4); }
-    .entry-color-swatch input[type="color"] {
-      position: absolute; inset: 0; width: 100%; height: 100%;
-      opacity: 0; cursor: pointer; border: none; padding: 0;
+    .entry-color-swatch:hover { transform: scale(1.15); border-color: var(--muted); }
+
+    /* Color picker popover */
+    .color-popover {
+      position: fixed;
+      z-index: 500;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0.6rem;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0.4rem;
+      width: 140px;
     }
+    .color-popover[hidden] { display: none !important; }
+    .color-swatch-option {
+      width: 24px; height: 24px; border-radius: 50%;
+      border: 2px solid transparent;
+      cursor: pointer;
+      transition: transform 0.12s, border-color 0.12s;
+    }
+    .color-swatch-option:hover { transform: scale(1.2); border-color: rgba(255,255,255,0.5); }
+    .color-swatch-option.is-selected { border-color: #ffffff; }
+    .color-popover-reset {
+      grid-column: 1 / -1;
+      font-family: var(--font-body); font-size: 0.72rem;
+      color: var(--muted); background: transparent;
+      border: 1px dashed var(--border); border-radius: 4px;
+      padding: 0.2rem; cursor: pointer; margin-top: 0.2rem;
+      text-align: center;
+    }
+    .color-popover-reset:hover { color: var(--text); border-color: var(--muted); }
 
     /* ── Entry footer ── */
     .entry-footer { margin-top:0.85rem; padding-top:0.7rem; border-top:1px solid var(--border); display:flex; align-items:center; justify-content:flex-end; gap:0.5rem; }
@@ -1657,31 +1686,19 @@
     plottedBadge.textContent = isPlotted ? "On timeline" : "Not plotted";
     footer.appendChild(plottedBadge);
 
-    // Color swatch — click to open native color picker
+    // Color swatch — click to open palette popover
     const broad = (Array.isArray(e.subjectTags) && e.subjectTags[0]) ? str(e.subjectTags[0].period) : "";
-    const currentColor = e.customColor || tlTagColor(broad);
-    const resolvedColor = hexColor(currentColor);
+    const currentColor = hexColor(e.customColor || tlTagColor(broad));
     const swatchWrap = document.createElement("div");
     swatchWrap.className = "entry-color-swatch";
-    swatchWrap.style.background = resolvedColor;
+    swatchWrap.style.background = currentColor;
     swatchWrap.title = "Change color";
-    const colorInput = document.createElement("input");
-    colorInput.type = "color";
-    colorInput.value = resolvedColor;
-    colorInput.addEventListener("input", function () {
-      swatchWrap.style.background = colorInput.value;
+    swatchWrap.addEventListener("click", function (ev) {
+      ev.stopPropagation();
+      openColorPopover(swatchWrap, e.id, currentColor, function (newColor) {
+        swatchWrap.style.background = newColor || hexColor(tlTagColor(broad));
+      });
     });
-    colorInput.addEventListener("change", async function () {
-      // Save the custom color to the entry
-      const entries = await loadEntries();
-      const idx = entries.findIndex(function (en) { return en.id === e.id; });
-      if (idx === -1) return;
-      entries[idx].customColor = colorInput.value;
-      entries[idx].updatedAt = new Date().toISOString();
-      await upsertEntry(entries[idx]);
-      buildTimeline(); // refresh timeline with new color
-    });
-    swatchWrap.appendChild(colorInput);
     footer.appendChild(swatchWrap);
 
     const editBtn = document.createElement("button"); editBtn.type = "button"; editBtn.className = "entry-edit-btn";
@@ -1833,7 +1850,7 @@
     const key = (broadTag || "").trim() || "__none__";
     if (!TL.tagColorMap.has(key)) {
       const color = key === "__none__"
-        ? "rgba(139,144,158,0.6)"
+        ? "#6b7180"   // solid grey — avoids rgba parsing issues in hexColor
         : TAG_PALETTE[TL.colorIdx++ % TAG_PALETTE.length];
       TL.tagColorMap.set(key, color);
     }
@@ -2161,6 +2178,86 @@
       queueMicrotask(function () { authEmailInput.focus(); });
     }
   })();
+
+
+  // ── Color palette popover ─────────────────────────────────────────────────
+
+  const SWATCH_PALETTE = [
+    "#7b9ec4", "#c47b7b", "#7bc49e", "#c4a57b",
+    "#9b7bc4", "#7bc4c4", "#c4937b", "#a3c47b",
+    "#c47ba3", "#7b8ec4", "#d4b896", "#96b4d4",
+    "#b4d496", "#d496b4", "#96d4b4", "#b496d4",
+  ];
+
+  const colorPopoverEl = document.createElement("div");
+  colorPopoverEl.className = "color-popover";
+  colorPopoverEl.setAttribute("hidden", "");
+  document.body.appendChild(colorPopoverEl);
+
+  let _popoverEntryId   = null;
+  let _popoverOnChange  = null;
+
+  function buildPopoverContents(currentColor) {
+    colorPopoverEl.innerHTML = "";
+    SWATCH_PALETTE.forEach(function (hex) {
+      const dot = document.createElement("div");
+      dot.className = "color-swatch-option" + (hex === currentColor ? " is-selected" : "");
+      dot.style.background = hex;
+      dot.title = hex;
+      dot.addEventListener("click", async function (ev) {
+        ev.stopPropagation();
+        closeColorPopover();
+        await applyEntryColor(_popoverEntryId, hex, _popoverOnChange);
+      });
+      colorPopoverEl.appendChild(dot);
+    });
+    const resetBtn = document.createElement("button");
+    resetBtn.type = "button";
+    resetBtn.className = "color-popover-reset";
+    resetBtn.textContent = "Reset to automatic";
+    resetBtn.addEventListener("click", async function (ev) {
+      ev.stopPropagation();
+      closeColorPopover();
+      await applyEntryColor(_popoverEntryId, null, _popoverOnChange);
+    });
+    colorPopoverEl.appendChild(resetBtn);
+  }
+
+  function openColorPopover(swatchEl, entryId, currentColor, onChange) {
+    _popoverEntryId  = entryId;
+    _popoverOnChange = onChange;
+    buildPopoverContents(currentColor);
+    colorPopoverEl.removeAttribute("hidden");
+    const rect = swatchEl.getBoundingClientRect();
+    const pw   = colorPopoverEl.offsetWidth || 148;
+    let left   = rect.left;
+    let top    = rect.bottom + 6;
+    if (left + pw > window.innerWidth - 8) left = window.innerWidth - pw - 8;
+    colorPopoverEl.style.left = left + "px";
+    colorPopoverEl.style.top  = top  + "px";
+  }
+
+  function closeColorPopover() {
+    colorPopoverEl.setAttribute("hidden", "");
+    _popoverEntryId  = null;
+    _popoverOnChange = null;
+  }
+
+  document.addEventListener("click", function () { closeColorPopover(); });
+  colorPopoverEl.addEventListener("click", function (ev) { ev.stopPropagation(); });
+
+  async function applyEntryColor(entryId, colorHex, onChange) {
+    const entries = await loadEntries();
+    const idx = entries.findIndex(function (en) { return en.id === entryId; });
+    if (idx === -1) return;
+    if (colorHex) { entries[idx].customColor = colorHex; }
+    else          { delete entries[idx].customColor; }
+    entries[idx].updatedAt = new Date().toISOString();
+    await upsertEntry(entries[idx]);
+    if (onChange) onChange(colorHex);
+    buildTimeline();
+    await refreshList();
+  }
 
   // Rebuild on resize
   let tlResizeTimer;
