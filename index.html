@@ -2205,8 +2205,10 @@
       dot.style.background = hex;
       dot.title = hex;
       dot.addEventListener("click", async function (ev) {
+        console.log("dot clicked", hex, _popoverEntryId);
         ev.stopPropagation();
-        const eid = _popoverEntryId;       // capture before close clears them
+        ev.preventDefault();
+        const eid = _popoverEntryId;
         const ocb = _popoverOnChange;
         closeColorPopover();
         await applyEntryColor(eid, hex, ocb);
@@ -2228,6 +2230,7 @@
   }
 
   function openColorPopover(swatchEl, entryId, currentColor, onChange) {
+    console.log("openColorPopover called", entryId, currentColor);
     _popoverEntryId  = entryId;
     _popoverOnChange = onChange;
     buildPopoverContents(currentColor);
