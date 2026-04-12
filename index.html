@@ -803,10 +803,10 @@
     if (!email || !password) return;
     clearAuthMessages();
     setAuthLoading(true);
-    const { error } = await sb.auth.signInWithPassword({ email, password });
+    const { data, error } = await sb.auth.signInWithPassword({ email, password });
     setAuthLoading(false);
     if (error) { showAuthError(error.message); return; }
-    // onAuthStateChange will fire and call onSignedIn
+    if (data && data.user) { await onSignedIn(data.user); }
   });
 
   // Create account
@@ -817,17 +817,18 @@
     if (password.length < 6) { showAuthError("Password must be at least 6 characters."); return; }
     clearAuthMessages();
     setAuthLoading(true);
-    const { error } = await sb.auth.signUp({ email, password });
+    const { data, error } = await sb.auth.signUp({ email, password });
     setAuthLoading(false);
     if (error) { showAuthError(error.message); return; }
-    showAuthSuccess("Account created — you are now signed in.");
-    // onAuthStateChange will fire
+    if (data && data.user) {
+      showAuthSuccess("Account created — signing you in…");
+      await onSignedIn(data.user);
+    }
   });
 
   authSignoutBtn.addEventListener("click", async function () {
-    signingOut = true;
     await sb.auth.signOut();
-    // onAuthStateChange SIGNED_OUT event handles all UI cleanup
+    // onAuthStateChange SIGNED_OUT handler calls onSignedOut()
   });
 
   // ── Supabase storage ──────────────────────────────────────────────────────
@@ -1923,11 +1924,11 @@
 
   // ── Auth state management ─────────────────────────────────────────────────
 
-  let signingOut = false;        // guard: prevents onAuthStateChange re-firing onSignedIn during sign out
-  let initialSessionChecked = false;  // guard: onAuthStateChange often fires before getSession; only one should win
+  // ── Auth state management ─────────────────────────────────────────────────
+  // Use getSession() as the single source of truth on load.
+  // onAuthStateChange only handles SIGNED_OUT to avoid duplicate onSignedIn calls.
 
   async function onSignedIn(user) {
-    if (signingOut) return;
     currentUser = user;
     authModal.style.display = "none";
     authBar.hidden = false;
@@ -1947,23 +1948,16 @@
     entriesList.innerHTML = "";
     emptyState.hidden = false;
     buildTimeline();
-    signingOut = false;
   }
 
-  // onAuthStateChange is the single source of truth for session changes
-  sb.auth.onAuthStateChange(async function (event, session) {
+  // Only listen for explicit SIGNED_OUT — everything else is handled by getSession() below
+  sb.auth.onAuthStateChange(function (event, session) {
     if (event === "SIGNED_OUT") {
       onSignedOut();
-      return;
-    }
-    if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "INITIAL_SESSION") {
-      if (session && session.user && !signingOut) {
-        await onSignedIn(session.user);
-      }
     }
   });
 
-  // Check for existing session on load (covers cases where onAuthStateChange fires late)
+  // Single initialisation — getSession() is the authoritative check
   (async function () {
     const { data: { session } } = await sb.auth.getSession();
     if (session && session.user) {
