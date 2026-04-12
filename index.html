@@ -826,8 +826,17 @@
   });
 
   authSignoutBtn.addEventListener("click", async function () {
-    await sb.auth.signOut();
-    // onAuthStateChange SIGNED_OUT handler calls onSignedOut()
+    // Clear Supabase session keys from localStorage directly to avoid lock contention
+    try {
+      Object.keys(localStorage).forEach(function (key) {
+        if (key.startsWith("sb-") || key.includes("supabase")) {
+          localStorage.removeItem(key);
+        }
+      });
+    } catch (e) {}
+    // Also attempt the normal signOut (may fail silently due to lock — that's fine)
+    try { await sb.auth.signOut({ scope: "local" }); } catch (e) {}
+    onSignedOut();
   });
 
   // ── Supabase storage ──────────────────────────────────────────────────────
