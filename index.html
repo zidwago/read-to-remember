@@ -135,10 +135,10 @@
     .subject-coords-wrap > input[type="number"]::-webkit-outer-spin-button { -webkit-appearance:none; }
     .subject-coords-wrap > input[type="number"]:focus { outline:none; border-color:var(--accent); color:var(--text); }
 
-    /* Subject-end hybrid control */
-    .subject-end-wrap { display:grid; grid-template-columns:auto 1fr; gap:0.4rem; align-items:center; }
+    /* Subject-end hybrid control — select stacked above number input */
+    .subject-end-wrap { display:flex; flex-direction:column; gap:0.3rem; }
     .subject-end-wrap select {
-      padding:0.35rem 1.6rem 0.35rem 0.5rem; font-family:var(--font-body); font-size:0.82rem;
+      width:100%; padding:0.35rem 1.6rem 0.35rem 0.5rem; font-family:var(--font-body); font-size:0.82rem;
       color:var(--muted); background:var(--bg); border:1px solid var(--border); border-radius:5px;
       cursor:pointer; appearance:none;
       background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 12 12'%3E%3Cpath fill='%238b909e' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
@@ -153,6 +153,7 @@
     .subject-end-wrap input[type="number"]::-webkit-inner-spin-button,
     .subject-end-wrap input[type="number"]::-webkit-outer-spin-button { -webkit-appearance:none; }
     .subject-end-wrap input[type="number"]:focus { outline:none; border-color:var(--accent); color:var(--text); }
+    .subject-end-wrap input[type="number"][hidden] { display:none !important; }
 
     /* ── Subject tags ── */
     .entry-subject-heading { margin-top:0.5rem; margin-bottom:0.35rem; font-weight:600; letter-spacing:0.02em; }
@@ -533,11 +534,11 @@
           <div class="subject-coords-wrap">
             <input type="number" id="edit-subject-start" placeholder="Start year" title="Subject period start year (BCE = negative)" />
             <div class="subject-end-wrap">
-              <select id="edit-subject-end-mode" title="Choose year or present">
-                <option value="year">Year</option>
+              <select id="edit-subject-end-mode" title="End year">
+                <option value="year">Enter end year…</option>
                 <option value="present">Present</option>
               </select>
-              <input type="number" id="edit-subject-end" placeholder="End year" title="Subject period end year (BCE = negative)" />
+              <input type="number" id="edit-subject-end" placeholder="e.g. 1840" title="Subject period end year (BCE = negative)" />
             </div>
           </div>
         </div>
@@ -611,11 +612,11 @@
           <div class="subject-coords-wrap">
             <input type="number" id="ai-subject-start" placeholder="Start year" title="Subject period start year (BCE = negative)" />
             <div class="subject-end-wrap">
-              <select id="ai-subject-end-mode" title="Choose year or present">
-                <option value="year">Year</option>
+              <select id="ai-subject-end-mode" title="End year">
+                <option value="year">Enter end year…</option>
                 <option value="present">Present</option>
               </select>
-              <input type="number" id="ai-subject-end" placeholder="End year" title="Subject period end year (BCE = negative)" />
+              <input type="number" id="ai-subject-end" placeholder="e.g. 1840" title="Subject period end year (BCE = negative)" />
             </div>
           </div>
         </div>
@@ -970,14 +971,14 @@
     const modeSel = document.getElementById(modeSelId);
     const numInp  = document.getElementById(numInputId);
     if (!modeSel || !numInp) return;
-    // Remove any existing listener before adding (safe to call multiple times)
-    const handler = function () {
+    function syncVisibility() {
       numInp.hidden = modeSel.value === "present";
       if (modeSel.value === "present") numInp.value = "";
-    };
+    }
     modeSel.removeEventListener("change", modeSel._subjectEndHandler);
-    modeSel._subjectEndHandler = handler;
-    modeSel.addEventListener("change", handler);
+    modeSel._subjectEndHandler = syncVisibility;
+    modeSel.addEventListener("change", syncVisibility);
+    syncVisibility(); // apply immediately on wire
   }
   // Wire AI confirm panel control on page load (always in DOM)
   wireSubjectEndControl("ai-subject-end-mode", "ai-subject-end");
