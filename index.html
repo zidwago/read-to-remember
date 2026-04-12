@@ -1281,11 +1281,21 @@
   }
 
   /** Convert any CSS color string to #rrggbb for use in <input type="color">.
-   *  Falls back to a neutral grey if the color can't be parsed. */
+   *  Handles hex strings directly; falls back to canvas for rgba/named colors. */
   function hexColor(cssColor) {
+    if (!cssColor) return "#8b909e";
+    const s = cssColor.trim();
+    // Already a 6-digit hex
+    if (/^#[0-9a-fA-F]{6}$/.test(s)) return s;
+    // 3-digit hex
+    if (/^#[0-9a-fA-F]{3}$/.test(s)) {
+      return "#" + s[1]+s[1]+s[2]+s[2]+s[3]+s[3];
+    }
+    // rgba / rgb / named — use canvas
     try {
       const cvs = document.createElement("canvas"); cvs.width = cvs.height = 1;
-      const ctx = cvs.getContext("2d"); ctx.fillStyle = cssColor; ctx.fillRect(0,0,1,1);
+      const ctx = cvs.getContext("2d"); ctx.fillStyle = "#8b909e"; ctx.fillRect(0,0,1,1);
+      ctx.fillStyle = s; ctx.fillRect(0,0,1,1);
       const d = ctx.getImageData(0,0,1,1).data;
       return "#" + [d[0],d[1],d[2]].map(function(v){return v.toString(16).padStart(2,"0");}).join("");
     } catch { return "#8b909e"; }
@@ -1650,14 +1660,15 @@
     // Color swatch — click to open native color picker
     const broad = (Array.isArray(e.subjectTags) && e.subjectTags[0]) ? str(e.subjectTags[0].period) : "";
     const currentColor = e.customColor || tlTagColor(broad);
+    const resolvedColor = hexColor(currentColor);
     const swatchWrap = document.createElement("div");
     swatchWrap.className = "entry-color-swatch";
-    swatchWrap.style.background = currentColor;
+    swatchWrap.style.background = resolvedColor;
     swatchWrap.title = "Change color";
     const colorInput = document.createElement("input");
     colorInput.type = "color";
-    colorInput.value = hexColor(currentColor);
-    colorInput.addEventListener("input", async function () {
+    colorInput.value = resolvedColor;
+    colorInput.addEventListener("input", function () {
       swatchWrap.style.background = colorInput.value;
     });
     colorInput.addEventListener("change", async function () {
