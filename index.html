@@ -2206,8 +2206,10 @@
       dot.title = hex;
       dot.addEventListener("click", async function (ev) {
         ev.stopPropagation();
+        const eid = _popoverEntryId;       // capture before close clears them
+        const ocb = _popoverOnChange;
         closeColorPopover();
-        await applyEntryColor(_popoverEntryId, hex, _popoverOnChange);
+        await applyEntryColor(eid, hex, ocb);
       });
       colorPopoverEl.appendChild(dot);
     });
@@ -2217,8 +2219,10 @@
     resetBtn.textContent = "Reset to automatic";
     resetBtn.addEventListener("click", async function (ev) {
       ev.stopPropagation();
+      const eid = _popoverEntryId;
+      const ocb = _popoverOnChange;
       closeColorPopover();
-      await applyEntryColor(_popoverEntryId, null, _popoverOnChange);
+      await applyEntryColor(eid, null, ocb);
     });
     colorPopoverEl.appendChild(resetBtn);
   }
@@ -2243,10 +2247,14 @@
     _popoverOnChange = null;
   }
 
-  document.addEventListener("click", function () { closeColorPopover(); });
+  // Close on outside click — stopPropagation on popover keeps it open on internal clicks
   colorPopoverEl.addEventListener("click", function (ev) { ev.stopPropagation(); });
+  document.addEventListener("click", function (ev) {
+    if (!colorPopoverEl.hasAttribute("hidden")) closeColorPopover();
+  });
 
   async function applyEntryColor(entryId, colorHex, onChange) {
+    if (!entryId) return;                          // guard: null entryId means popover was already closed
     const entries = await loadEntries();
     const idx = entries.findIndex(function (en) { return en.id === entryId; });
     if (idx === -1) return;
