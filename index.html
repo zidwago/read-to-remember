@@ -1694,10 +1694,16 @@
     swatchWrap.style.background = currentColor;
     swatchWrap.title = "Change color";
     swatchWrap.addEventListener("click", function (ev) {
+      console.log("SWATCH CLICKED", e.id);
       ev.stopPropagation();
-      openColorPopover(swatchWrap, e.id, currentColor, function (newColor) {
-        swatchWrap.style.background = newColor || hexColor(tlTagColor(broad));
-      });
+      ev.preventDefault();
+      if (typeof openColorPopover === "function") {
+        openColorPopover(swatchWrap, e.id, currentColor, function (newColor) {
+          swatchWrap.style.background = newColor || hexColor(tlTagColor(broad));
+        });
+      } else {
+        console.error("openColorPopover not defined yet");
+      }
     });
     footer.appendChild(swatchWrap);
 
