@@ -502,7 +502,7 @@
           <span class="year-range-label" style="margin-top:0.45rem;">Timeline coordinates — BCE as negative</span>
           <div class="year-range-inputs">
             <input type="number" id="edit-subject-start" placeholder="Start year" title="Subject period start year (BCE = negative)" />
-            <input type="number" id="edit-subject-end"   placeholder="End year"   title="Subject period end year (BCE = negative)" />
+            <input type="text"   id="edit-subject-end"   placeholder="End year or &quot;present&quot;" title="Subject period end year (BCE = negative) or type 'present' for ongoing" />
           </div>
         </div>
         <div class="field ai-tags-field">
@@ -574,7 +574,7 @@
           <span class="year-range-label" style="margin-top:0.45rem;">Timeline coordinates — BCE as negative</span>
           <div class="year-range-inputs">
             <input type="number" id="ai-subject-start" placeholder="Start year" title="Subject period start year (BCE = negative)" />
-            <input type="number" id="ai-subject-end"   placeholder="End year"   title="Subject period end year (BCE = negative)" />
+            <input type="text"   id="ai-subject-end"   placeholder="End year or &quot;present&quot;" title="Subject period end year (BCE = negative) or type 'present' for ongoing" />
           </div>
         </div>
       </div>
@@ -689,8 +689,10 @@
     "  subjectStart (integer or null): earliest year of the subject period as an integer. " +
     "BCE years are NEGATIVE. For 'Hellenistic and Roman antiquity, c. 300 BCE–200 CE' use -300. " +
     "For 'Unknown' use null.\n" +
-    "  subjectEnd (integer or null): latest year of the subject period as an integer. " +
-    "BCE years are NEGATIVE. For the same Hellenistic example use 200. For 'Unknown' use null.\n" +
+    "  subjectEnd (integer, null, or the string \"present\"): latest year of the subject period. " +
+    "BCE years are NEGATIVE. For ongoing or open-ended traditions (e.g. Contemporary Philosophy, " +
+    "Analytic Philosophy, any living tradition) return the string \"present\". " +
+    "For unknown end use null.\n" +
     "  subjectTags (array of exactly two objects): first granularity 'broad' (wide tradition, " +
     "e.g. Western Philosophy), second granularity 'mid' (movement or school, e.g. German Idealism). " +
     "Each: period (string), dateRange (string — approximate, natural language), granularity (string).\n\n" +
@@ -1208,16 +1210,28 @@
     return isNaN(n) ? null : n;
   }
 
-  /** Write a nullable int to a number input (empty string for null). */
+  /** Write a nullable int (or "present") to a number input. */
   function setNumInput(el, val) {
     if (el) el.value = (val === null || val === undefined) ? "" : String(val);
   }
 
-  /** Read a nullable int from a number input. */
+  /** True if a value represents an open-ended "present" period. */
+  function isPresent(val) {
+    return typeof val === "string" && val.toLowerCase().trim() === "present";
+  }
+
+  /** Read a nullable int from an input; returns "present" if the user typed that. */
   function getNumInput(el) {
     if (!el || el.value === "") return null;
+    if (isPresent(el.value)) return "present";
     const n = parseInt(el.value, 10);
     return isNaN(n) ? null : n;
+  }
+
+  /** Resolve a subjectEnd value to a plot coordinate — "present" becomes current year. */
+  function resolveSubjectEnd(val) {
+    if (isPresent(val)) return new Date().getFullYear();
+    return nullableInt(val);
   }
 
   // ── Populate AI confirmation panel ────────────────────────────────────────
@@ -1250,7 +1264,14 @@
     }
     aiSubjectPeriod.value = pick(parsed.subjectPeriod, "");
     setNumInput(aiSubjectStart, nullableInt(parsed.subjectStart));
-    setNumInput(aiSubjectEnd,   nullableInt(parsed.subjectEnd));
+    // Handle "present" for subject end
+    const rawSubjectEnd = parsed.subjectEnd;
+    if (rawSubjectEnd !== null && rawSubjectEnd !== undefined &&
+        String(rawSubjectEnd).toLowerCase().trim() === "present") {
+      if (aiSubjectEnd) aiSubjectEnd.value = "present";
+    } else {
+      setNumInput(aiSubjectEnd, nullableInt(rawSubjectEnd));
+    }
     renderTagEditor(normalizeSubjectTagsFromAi(parsed), aiSubjectTagsRows);
   }
 
@@ -1674,9 +1695,10 @@
   async function plottableEntries() {
     const all = await loadEntries();
     return all.filter(function (e) {
+      const hasSubjectEnd = e.subjectEnd !== null && e.subjectEnd !== undefined;
       return e.composedStart !== null && e.composedStart !== undefined &&
              e.subjectStart  !== null && e.subjectStart  !== undefined &&
-             e.subjectEnd    !== null && e.subjectEnd    !== undefined;
+             hasSubjectEnd;
     });
   }
 
@@ -1742,7 +1764,7 @@
       d3.min(ERA_BANDS, function (b) { return b.start; })
     );
     const xMax = Math.max(
-      d3.max(sorted, function (e) { return Math.max(e.subjectEnd, e.composedStart, e.composedEnd || e.composedStart); }),
+      d3.max(sorted, function (e) { return Math.max(resolveSubjectEnd(e.subjectEnd) || 0, e.composedStart, e.composedEnd || e.composedStart); }),
       d3.max(ERA_BANDS, function (b) { return b.end; }),
       new Date().getFullYear()
     );
@@ -1825,7 +1847,8 @@
         const color = tlTagColor(broad);
 
         const x1  = xScale(entry.subjectStart);
-        const x2  = xScale(entry.subjectEnd);
+        const resolvedEnd = resolveSubjectEnd(entry.subjectEnd) || entry.subjectStart;
+        const x2  = xScale(resolvedEnd);
         const barW = Math.max(TL.minBarW, x2 - x1);
         const dotX = xScale(entry.composedStart);
 
@@ -1912,8 +1935,9 @@
     }
 
     row("Composed", entry.compositionYearRange || formatYear(entry.composedStart));
+    const subjectEndDisplay = isPresent(entry.subjectEnd) ? "Present" : formatYear(entry.subjectEnd);
     row("Subject period", entry.subjectPeriod ||
-        (entry.subjectStart !== null ? formatYear(entry.subjectStart) + " – " + formatYear(entry.subjectEnd) : ""));
+        (entry.subjectStart !== null ? formatYear(entry.subjectStart) + " – " + subjectEndDisplay : ""));
     row("Engagement", entry.engagement);
 
     if (broad || mid) {
