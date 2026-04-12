@@ -257,6 +257,20 @@
     /* General notes in entry card */
     .entry-general-notes { margin-top:0.65rem; padding-top:0.65rem; border-top:1px solid var(--border); font-size:0.9rem; color:var(--muted); white-space:pre-wrap; }
 
+    /* ── Entry color swatch ── */
+    .entry-color-swatch {
+      width: 16px; height: 16px; border-radius: 50%;
+      border: 2px solid rgba(255,255,255,0.15);
+      cursor: pointer; flex-shrink: 0;
+      transition: transform 0.15s, border-color 0.15s;
+      position: relative;
+    }
+    .entry-color-swatch:hover { transform: scale(1.2); border-color: rgba(255,255,255,0.4); }
+    .entry-color-swatch input[type="color"] {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      opacity: 0; cursor: pointer; border: none; padding: 0;
+    }
+
     /* ── Entry footer ── */
     .entry-footer { margin-top:0.85rem; padding-top:0.7rem; border-top:1px solid var(--border); display:flex; align-items:center; justify-content:flex-end; gap:0.5rem; }
     .entry-updated-note { font-size:0.78rem; color:var(--muted); margin-right:auto; }
@@ -1266,6 +1280,17 @@
     catch { throw new Error("Could not parse the model response as JSON."); }
   }
 
+  /** Convert any CSS color string to #rrggbb for use in <input type="color">.
+   *  Falls back to a neutral grey if the color can't be parsed. */
+  function hexColor(cssColor) {
+    try {
+      const cvs = document.createElement("canvas"); cvs.width = cvs.height = 1;
+      const ctx = cvs.getContext("2d"); ctx.fillStyle = cssColor; ctx.fillRect(0,0,1,1);
+      const d = ctx.getImageData(0,0,1,1).data;
+      return "#" + [d[0],d[1],d[2]].map(function(v){return v.toString(16).padStart(2,"0");}).join("");
+    } catch { return "#8b909e"; }
+  }
+
   /** Parse a value from the AI as a nullable integer. Returns null for null/undefined/""/non-numeric. */
   function nullableInt(v) {
     if (v === null || v === undefined || v === "") return null;
@@ -1621,6 +1646,33 @@
     plottedBadge.title = isPlotted ? "Plotted on timeline" : "Add timeline coordinates via Edit to plot";
     plottedBadge.textContent = isPlotted ? "On timeline" : "Not plotted";
     footer.appendChild(plottedBadge);
+
+    // Color swatch — click to open native color picker
+    const broad = (Array.isArray(e.subjectTags) && e.subjectTags[0]) ? str(e.subjectTags[0].period) : "";
+    const currentColor = e.customColor || tlTagColor(broad);
+    const swatchWrap = document.createElement("div");
+    swatchWrap.className = "entry-color-swatch";
+    swatchWrap.style.background = currentColor;
+    swatchWrap.title = "Change color";
+    const colorInput = document.createElement("input");
+    colorInput.type = "color";
+    colorInput.value = hexColor(currentColor);
+    colorInput.addEventListener("input", async function () {
+      swatchWrap.style.background = colorInput.value;
+    });
+    colorInput.addEventListener("change", async function () {
+      // Save the custom color to the entry
+      const entries = await loadEntries();
+      const idx = entries.findIndex(function (en) { return en.id === e.id; });
+      if (idx === -1) return;
+      entries[idx].customColor = colorInput.value;
+      entries[idx].updatedAt = new Date().toISOString();
+      await upsertEntry(entries[idx]);
+      buildTimeline(); // refresh timeline with new color
+    });
+    swatchWrap.appendChild(colorInput);
+    footer.appendChild(swatchWrap);
+
     const editBtn = document.createElement("button"); editBtn.type = "button"; editBtn.className = "entry-edit-btn";
     editBtn.setAttribute("data-entry-id", e.id); editBtn.textContent = "Edit";
     footer.appendChild(editBtn); li.appendChild(footer);
@@ -1930,7 +1982,7 @@
         const y     = i * TL.rowH + TL.rowH / 2;
         const broad = (Array.isArray(entry.subjectTags) && entry.subjectTags[0])
           ? str(entry.subjectTags[0].period) : "";
-        const color = tlTagColor(broad);
+        const color = entry.customColor || tlTagColor(broad);
 
         const x1  = xScale(entry.subjectStart);
         const resolvedEnd = resolveSubjectEnd(entry.subjectEnd) || entry.subjectStart;
