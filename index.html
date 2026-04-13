@@ -910,6 +910,10 @@
   let editingEntryId = null;
   let pendingSnapshot = null;
 
+  // Engagement filter state — declared early so plottableEntries() can reference them
+  const ENGAGEMENT_LEVELS = ["Studied / Close Reading", "Read", "Partially Read", "Consulted"];
+  let activeEngagementLevels = new Set(ENGAGEMENT_LEVELS);
+
   function str(v) { return (v == null || typeof v !== "string") ? "" : v.trim(); }
 
   // ── Auth ──────────────────────────────────────────────────────────────────
@@ -2361,12 +2365,6 @@
 
   // ── Engagement filter ────────────────────────────────────────────────────
 
-  // Track which engagement levels are active (all on by default)
-  const ENGAGEMENT_LEVELS = [
-    "Studied / Close Reading", "Read", "Partially Read", "Consulted"
-  ];
-  let activeEngagementLevels = new Set(ENGAGEMENT_LEVELS);
-
   const filterBtn        = document.getElementById("tl-filter-btn");
   const filterDropdown   = document.getElementById("tl-filter-dropdown");
   const filterAllChk     = document.getElementById("tl-filter-all");
@@ -2382,8 +2380,8 @@
   // Toggle dropdown open/close
   filterBtn.addEventListener("click", function (ev) {
     ev.stopPropagation();
-    const open = filterDropdown.hasAttribute("hidden") === false ? false : true;
-    if (open) {
+    const isHidden = filterDropdown.hasAttribute("hidden");
+    if (isHidden) {
       filterDropdown.removeAttribute("hidden");
       filterBtn.classList.add("is-open");
     } else {
