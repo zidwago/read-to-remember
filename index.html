@@ -369,11 +369,44 @@
     .btn-add-tag:hover, .btn-add-marginalia:hover { border-color:var(--accent); border-style:solid; }
 
     /* ── Timeline ── */
-    #timeline-section { margin-bottom: 2.5rem; }
-    .timeline-header {
-      display: flex; align-items: baseline; gap: 1rem;
+    .timeline-controls {
+      display: flex; align-items: center; gap: 0.75rem;
       margin-bottom: 0.75rem; flex-wrap: wrap;
     }
+    .tl-filter-wrap { position: relative; }
+    .tl-filter-btn {
+      font-family: var(--font-body); font-size: 0.82rem; font-weight: 600;
+      padding: 0.35rem 0.75rem; color: var(--muted);
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 0.4rem;
+    }
+    .tl-filter-btn:hover { border-color: var(--muted); color: var(--text); }
+    .tl-filter-btn.is-filtered { border-color: var(--accent); color: var(--accent); }
+    .tl-filter-chevron { font-size: 0.65rem; transition: transform 0.15s; }
+    .tl-filter-btn.is-open .tl-filter-chevron { transform: rotate(180deg); }
+
+    .tl-filter-dropdown {
+      position: absolute; top: calc(100% + 4px); left: 0;
+      z-index: 300; min-width: 11rem;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 0.35rem 0;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+    }
+    .tl-filter-dropdown[hidden] { display: none !important; }
+    .tl-filter-option {
+      display: flex; align-items: center; gap: 0.55rem;
+      padding: 0.45rem 0.85rem; cursor: pointer;
+      font-family: var(--font-body); font-size: 0.85rem; color: var(--text);
+      user-select: none;
+    }
+    .tl-filter-option:hover { background: rgba(255,255,255,0.04); }
+    .tl-filter-option input[type="checkbox"] {
+      width: 14px; height: 14px; accent-color: var(--accent);
+      cursor: pointer; flex-shrink: 0;
+    }
+    .tl-filter-divider { border: none; border-top: 1px solid var(--border); margin: 0.25rem 0; }
+
+    #timeline-section { margin-bottom: 2.5rem; }
     .timeline-meta { font-size: 0.82rem; color: var(--muted); }
 
     .timeline-wrap {
@@ -681,8 +714,31 @@
 
   <!-- Timeline -->
   <section aria-labelledby="timeline-heading" id="timeline-section">
-    <div class="timeline-header">
+    <div class="timeline-controls">
       <h2 id="timeline-heading" class="list-heading" style="margin:0;">Timeline</h2>
+      <div class="tl-filter-wrap" id="tl-filter-wrap">
+        <button type="button" class="tl-filter-btn" id="tl-filter-btn">
+          Engagement <span class="tl-filter-chevron">&#9660;</span>
+        </button>
+        <div class="tl-filter-dropdown" id="tl-filter-dropdown" hidden>
+          <label class="tl-filter-option" id="tl-filter-all-label">
+            <input type="checkbox" id="tl-filter-all" checked /> All
+          </label>
+          <hr class="tl-filter-divider" />
+          <label class="tl-filter-option">
+            <input type="checkbox" class="tl-filter-level" value="Studied / Close Reading" checked /> Studied / Close Reading
+          </label>
+          <label class="tl-filter-option">
+            <input type="checkbox" class="tl-filter-level" value="Read" checked /> Read
+          </label>
+          <label class="tl-filter-option">
+            <input type="checkbox" class="tl-filter-level" value="Partially Read" checked /> Partially Read
+          </label>
+          <label class="tl-filter-option">
+            <input type="checkbox" class="tl-filter-level" value="Consulted" checked /> Consulted
+          </label>
+        </div>
+      </div>
       <div class="timeline-meta" id="timeline-meta"></div>
     </div>
     <div class="timeline-wrap" id="timeline-wrap">
@@ -1870,9 +1926,14 @@
     const all = await loadEntries();
     return all.filter(function (e) {
       const hasSubjectEnd = e.subjectEnd !== null && e.subjectEnd !== undefined;
-      return e.composedStart !== null && e.composedStart !== undefined &&
-             e.subjectStart  !== null && e.subjectStart  !== undefined &&
-             hasSubjectEnd;
+      const hasCoords = e.composedStart !== null && e.composedStart !== undefined &&
+                        e.subjectStart  !== null && e.subjectStart  !== undefined &&
+                        hasSubjectEnd;
+      if (!hasCoords) return false;
+      // Apply engagement filter — if set is empty show nothing; if all on show all
+      if (activeEngagementLevels.size === 0) return false;
+      if (activeEngagementLevels.size === ENGAGEMENT_LEVELS.length) return true;
+      return activeEngagementLevels.has(str(e.engagement));
     });
   }
 
@@ -2296,6 +2357,76 @@
     await refreshList();
     console.log("applyEntryColor done");
   }
+
+
+  // ── Engagement filter ────────────────────────────────────────────────────
+
+  // Track which engagement levels are active (all on by default)
+  const ENGAGEMENT_LEVELS = [
+    "Studied / Close Reading", "Read", "Partially Read", "Consulted"
+  ];
+  let activeEngagementLevels = new Set(ENGAGEMENT_LEVELS);
+
+  const filterBtn        = document.getElementById("tl-filter-btn");
+  const filterDropdown   = document.getElementById("tl-filter-dropdown");
+  const filterAllChk     = document.getElementById("tl-filter-all");
+  const filterLevelChks  = document.querySelectorAll(".tl-filter-level");
+
+  function updateFilterBtn() {
+    const allOn = activeEngagementLevels.size === ENGAGEMENT_LEVELS.length;
+    filterBtn.classList.toggle("is-filtered", !allOn);
+    filterAllChk.checked = allOn;
+    filterAllChk.indeterminate = !allOn && activeEngagementLevels.size > 0;
+  }
+
+  // Toggle dropdown open/close
+  filterBtn.addEventListener("click", function (ev) {
+    ev.stopPropagation();
+    const open = filterDropdown.hasAttribute("hidden") === false ? false : true;
+    if (open) {
+      filterDropdown.removeAttribute("hidden");
+      filterBtn.classList.add("is-open");
+    } else {
+      filterDropdown.setAttribute("hidden", "");
+      filterBtn.classList.remove("is-open");
+    }
+  });
+
+  // Close on outside click
+  document.addEventListener("click", function (ev) {
+    if (!filterDropdown.hasAttribute("hidden") &&
+        !ev.target.closest("#tl-filter-wrap")) {
+      filterDropdown.setAttribute("hidden", "");
+      filterBtn.classList.remove("is-open");
+    }
+  });
+  filterDropdown.addEventListener("click", function (ev) { ev.stopPropagation(); });
+
+  // "All" checkbox
+  filterAllChk.addEventListener("change", function () {
+    if (filterAllChk.checked) {
+      activeEngagementLevels = new Set(ENGAGEMENT_LEVELS);
+      filterLevelChks.forEach(function (chk) { chk.checked = true; });
+    } else {
+      activeEngagementLevels.clear();
+      filterLevelChks.forEach(function (chk) { chk.checked = false; });
+    }
+    updateFilterBtn();
+    buildTimeline();
+  });
+
+  // Individual level checkboxes
+  filterLevelChks.forEach(function (chk) {
+    chk.addEventListener("change", function () {
+      if (chk.checked) {
+        activeEngagementLevels.add(chk.value);
+      } else {
+        activeEngagementLevels.delete(chk.value);
+      }
+      updateFilterBtn();
+      buildTimeline();
+    });
+  });
 
   // Rebuild on resize
   let tlResizeTimer;
