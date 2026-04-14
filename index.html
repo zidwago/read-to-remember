@@ -1852,36 +1852,17 @@
       note.textContent = "Updated " + new Date(e.updatedAt).toLocaleDateString(undefined, {year:"numeric",month:"short",day:"numeric"});
       footer.appendChild(note);
     }
-    // Plotted indicator
-    const isPlotted = e.composedStart !== null && e.composedStart !== undefined &&
-                      e.subjectStart  !== null && e.subjectStart  !== undefined &&
-                      e.subjectEnd    !== null && e.subjectEnd    !== undefined;
+    // Plotted indicator — check composedStart + at least one SP with a start coord
+    const _sps = normalizeSubjectPeriods(e);
+    const isPlotted = (e.composedStart !== null && e.composedStart !== undefined) &&
+                      _sps.some(function (sp) { return sp.start !== null && sp.start !== undefined; });
     const plottedBadge = document.createElement("span");
     plottedBadge.className = isPlotted ? "entry-plotted-badge" : "entry-unplotted-badge";
     plottedBadge.title = isPlotted ? "Plotted on timeline" : "Add timeline coordinates via Edit to plot";
     plottedBadge.textContent = isPlotted ? "On timeline" : "Not plotted";
     footer.appendChild(plottedBadge);
 
-    // Color swatch — click to open palette popover
-    const broad = (Array.isArray(e.subjectTags) && e.subjectTags[0]) ? str(e.subjectTags[0].period) : "";
-    const currentColor = hexColor(e.customColor || tlTagColor(broad));
-    const swatchWrap = document.createElement("div");
-    swatchWrap.className = "entry-color-swatch";
-    swatchWrap.style.background = currentColor;
-    swatchWrap.title = "Change color";
-    swatchWrap.addEventListener("click", function (ev) {
-      console.log("SWATCH CLICKED", e.id);
-      ev.stopPropagation();
-      ev.preventDefault();
-      if (typeof openColorPopover === "function") {
-        openColorPopover(swatchWrap, e.id, currentColor, function (newColor) {
-          swatchWrap.style.background = newColor || hexColor(tlTagColor(broad));
-        });
-      } else {
-        console.error("openColorPopover not defined yet");
-      }
-    });
-    footer.appendChild(swatchWrap);
+
 
     const editBtn = document.createElement("button"); editBtn.type = "button"; editBtn.className = "entry-edit-btn";
     editBtn.setAttribute("data-entry-id", e.id); editBtn.textContent = "Edit";
@@ -2048,9 +2029,9 @@
       if (e.composedStart === null || e.composedStart === undefined) return false;
       // Must have at least one subject period with start+end coords
       const sps = normalizeSubjectPeriods(e);
+      // Only require start coord — end can be null (treated as open-ended on timeline)
       const hasPlottableSp = sps.some(function (sp) {
-        return sp.start !== null && sp.start !== undefined &&
-               sp.end   !== null && sp.end   !== undefined;
+        return sp.start !== null && sp.start !== undefined;
       });
       if (!hasPlottableSp) return false;
       if (activeEngagementLevels.size === 0) return false;
@@ -2209,15 +2190,15 @@
         const y     = i * TL.rowH + TL.rowH / 2;
         const broad = (Array.isArray(entry.subjectTags) && entry.subjectTags[0])
           ? str(entry.subjectTags[0].period) : "";
-        const entryDefaultColor = entry.customColor || tlTagColor(broad);
+        const entryDefaultColor = tlTagColor(broad);
         const dotX = xScale(entry.composedStart);
         const sps  = normalizeSubjectPeriods(entry);
 
         // Draw one bar per subject period at the same Y
         sps.forEach(function (sp, si) {
           if (sp.start === null || sp.start === undefined) return;
-          const spEnd = resolveSubjectEnd(sp.end);
-          if (spEnd === null) return;
+          // If end is null, plot as a minimal bar at start (point in time)
+          const spEnd = resolveSubjectEnd(sp.end) !== null ? resolveSubjectEnd(sp.end) : sp.start;
           const barColor = sp.color || entryDefaultColor;
           const x1  = xScale(sp.start);
           const x2  = xScale(spEnd);
@@ -2424,9 +2405,7 @@
       dot.style.background = hex;
       dot.title = hex;
       dot.addEventListener("click", async function (ev) {
-        console.log("dot clicked", hex, _popoverEntryId);
         ev.stopPropagation();
-        ev.preventDefault();
         const eid = _popoverEntryId;
         const ocb = _popoverOnChange;
         closeColorPopover();
@@ -2449,7 +2428,6 @@
   }
 
   function openColorPopover(swatchEl, entryId, currentColor, onChange) {
-    console.log("openColorPopover called", entryId, currentColor);
     _popoverEntryId  = entryId;
     _popoverOnChange = onChange;
     buildPopoverContents(currentColor);
@@ -2478,22 +2456,17 @@
   });
 
   async function applyEntryColor(entryId, colorHex, onChange) {
-    console.log("applyEntryColor called", entryId, colorHex);
-    if (!entryId) { console.warn("applyEntryColor: no entryId"); return; }
+    if (!entryId) return;
     const entries = await loadEntries();
-    console.log("entries loaded:", entries.length);
     const idx = entries.findIndex(function (en) { return en.id === entryId; });
-    console.log("entry idx:", idx);
-    if (idx === -1) { console.warn("applyEntryColor: entry not found"); return; }
+    if (idx === -1) return;
     if (colorHex) { entries[idx].customColor = colorHex; }
     else          { delete entries[idx].customColor; }
     entries[idx].updatedAt = new Date().toISOString();
-    console.log("upserting entry with color:", entries[idx].customColor);
     await upsertEntry(entries[idx]);
     if (onChange) onChange(colorHex);
     buildTimeline();
     await refreshList();
-    console.log("applyEntryColor done");
   }
 
 
