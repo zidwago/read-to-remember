@@ -124,6 +124,25 @@
     .year-range-label { font-size:0.65rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--muted); margin-bottom:0.3rem; display:block; opacity:0.7; }
     .year-range-hint  { font-size:0.72rem; color:var(--muted); margin-top:0.3rem; opacity:0.75; line-height:1.35; }
 
+    /* ── Subject period rows ── */
+    .sp-rows { display:flex; flex-direction:column; gap:0.65rem; margin-bottom:0.65rem; }
+    .sp-row {
+      padding:0.65rem 0.75rem; background:var(--bg);
+      border:1px solid var(--border); border-left:3px solid rgba(196,165,116,0.5);
+      border-radius:6px;
+    }
+    .sp-row-top { display:grid; grid-template-columns:1fr auto; gap:0.5rem; align-items:center; margin-bottom:0.5rem; }
+    .sp-row-label { font-size:0.9rem; width:100%; }
+    .sp-row-remove { font-family:var(--font-body); font-size:1.1rem; line-height:1; padding:0.3rem 0.5rem; color:var(--muted); background:transparent; border:1px solid var(--border); border-radius:6px; cursor:pointer; flex-shrink:0; }
+    .sp-row-remove:hover { color:var(--text); border-color:var(--muted); }
+    .sp-row-coords { display:grid; grid-template-columns:1fr 1fr auto; gap:0.5rem; align-items:start; }
+    .sp-row-coords input[type="number"] { width:100%; padding:0.35rem 0.5rem; font-family:var(--font-body); font-size:0.82rem; color:var(--muted); background:var(--surface); border:1px solid var(--border); border-radius:5px; -moz-appearance:textfield; }
+    .sp-row-coords input[type="number"]::-webkit-inner-spin-button, .sp-row-coords input[type="number"]::-webkit-outer-spin-button { -webkit-appearance:none; }
+    .sp-row-coords input[type="number"]:focus { outline:none; border-color:var(--accent); color:var(--text); }
+    .sp-color-swatch { width:20px; height:20px; border-radius:50%; border:2px solid var(--border); cursor:pointer; flex-shrink:0; position:relative; margin-top:0.35rem; }
+    .sp-color-swatch:hover { border-color:var(--muted); transform:scale(1.15); }
+    @media (max-width:30rem) { .sp-row-coords { grid-template-columns:1fr 1fr; } .sp-color-swatch { margin-top:0; } }
+
     /* Subject coords: start input + end hybrid side by side */
     .subject-coords-wrap { display:grid; grid-template-columns:1fr 1fr; gap:0.4rem; margin-top:0.4rem; }
     .subject-coords-wrap > input[type="number"] {
@@ -599,25 +618,9 @@
 
         <!-- Subject context -->
         <h3 class="edit-section-heading">Subject context</h3>
-        <p class="edit-section-note">How you situate this text in history. Adjust freely — this is interpretive work, not lookup.</p>
-        <div class="field">
-          <label for="edit-subject-period" class="with-dot">
-            <span class="temporal-dot temporal-dot--subject"></span>
-            Subject period
-          </label>
-          <input type="text" id="edit-subject-period" autocomplete="off" placeholder="The era it thinks with" />
-          <span class="year-range-label" style="margin-top:0.45rem;">Timeline coordinates — BCE as negative</span>
-          <div class="subject-coords-wrap">
-            <input type="number" id="edit-subject-start" placeholder="Start year" title="Subject period start year (BCE = negative)" />
-            <div class="subject-end-wrap">
-              <select id="edit-subject-end-mode" title="End year">
-                <option value="year">Enter end year…</option>
-                <option value="present">Present</option>
-              </select>
-              <input type="number" id="edit-subject-end" placeholder="e.g. 1840" title="Subject period end year (BCE = negative)" />
-            </div>
-          </div>
-        </div>
+        <p class="edit-section-note">Add one or more subject periods — each represents a historical tradition this text engages with. Each gets its own bar on the timeline.</p>
+        <div id="edit-sp-rows" class="sp-rows"></div>
+        <button type="button" class="btn-add-tag" id="edit-add-sp-btn" style="margin-bottom:1rem;">+ Add subject period</button>
         <div class="field ai-tags-field">
           <span class="ai-tags-field-label">Subject tags</span>
           <p class="ai-tags-section-note">Broad = civilizational tradition; mid = movement or school; specific = concept, problem, or figure central to your reading.</p>
@@ -681,20 +684,10 @@
           <span class="year-range-label" style="margin-top:0.45rem;">Timeline coordinate — BCE as negative</span>
           <input type="number" id="ai-composed-year" placeholder="e.g. 1975 or -330" title="Composition year (BCE = negative)" style="margin-top:0.3rem; padding:0.35rem 0.5rem; font-size:0.82rem; color:var(--muted); background:var(--bg); border:1px solid var(--border); border-radius:5px; width:100%; -moz-appearance:textfield;" />
         </div>
-        <div class="field">
-          <label for="ai-subject-period" class="with-dot"><span class="temporal-dot temporal-dot--subject"></span>Subject period</label>
-          <input type="text" id="ai-subject-period" autocomplete="off" placeholder="The era it thinks with" />
-          <span class="year-range-label" style="margin-top:0.45rem;">Timeline coordinates — BCE as negative</span>
-          <div class="subject-coords-wrap">
-            <input type="number" id="ai-subject-start" placeholder="Start year" title="Subject period start year (BCE = negative)" />
-            <div class="subject-end-wrap">
-              <select id="ai-subject-end-mode" title="End year">
-                <option value="year">Enter end year…</option>
-                <option value="present">Present</option>
-              </select>
-              <input type="number" id="ai-subject-end" placeholder="e.g. 1840" title="Subject period end year (BCE = negative)" />
-            </div>
-          </div>
+        <div>
+          <p class="year-range-label" style="margin-bottom:0.5rem;">Subject periods — each gets its own timeline bar</p>
+          <div id="ai-sp-rows" class="sp-rows"></div>
+          <button type="button" class="btn-add-tag" id="ai-add-sp-btn">+ Add subject period</button>
         </div>
       </div>
 
@@ -815,16 +808,13 @@
     "  composedEnd (integer or null): latest year of composition as an integer. " +
     "BCE years are NEGATIVE. For '8th–15th century' use 1500. For a single year same as composedStart. " +
     "For 'Unknown' use null.\n" +
-    "  subjectPeriod (string): the historical era the work primarily ENGAGES WITH — prose label, " +
-    "may differ from compositionYear. A 1975 study of Hegel has subjectPeriod roughly " +
-    "'German Idealism, c. 1780–1840'. Express naturally, never hard boundaries.\n" +
-    "  subjectStart (integer or null): earliest year of the subject period as an integer. " +
-    "BCE years are NEGATIVE. For 'Hellenistic and Roman antiquity, c. 300 BCE–200 CE' use -300. " +
-    "For 'Unknown' use null.\n" +
-    "  subjectEnd (integer, null, or the string \"present\"): latest year of the subject period. " +
-    "BCE years are NEGATIVE. For ongoing or open-ended traditions (e.g. Contemporary Philosophy, " +
-    "Analytic Philosophy, any living tradition) return the string \"present\". " +
-    "For unknown end use null.\n" +
+    "  subjectPeriods (array): the historical eras or traditions this work engages with. " +
+    "A text can engage multiple traditions simultaneously (e.g. a 1956 analytic paper on " +
+    "dreaming engages both Cartesian epistemology AND contemporary analytic philosophy). " +
+    "Return an array of 1-3 objects, each with: " +
+    "label (string — natural prose, e.g. 'German Idealism, c. 1780-1840'), " +
+    "start (integer or null — BCE as negative), " +
+    "end (integer, null, or string \"present\" for ongoing traditions).\n" +
     "  subjectTags (array of exactly two objects): first granularity 'broad' (wide tradition, " +
     "e.g. Western Philosophy), second granularity 'mid' (movement or school, e.g. German Idealism). " +
     "Each: period (string), dateRange (string — approximate, natural language), granularity (string).\n\n" +
@@ -860,7 +850,6 @@
   const editIndicator      = document.getElementById("edit-indicator");
   const editIndicatorTitle = document.getElementById("edit-indicator-title");
   const editSection        = document.getElementById("edit-section");
-  const editSubjectPeriodInput = document.getElementById("edit-subject-period");
   const formSubjectTagsRows    = document.getElementById("form-subject-tags-rows");
   const formAddSubjectTagBtn   = document.getElementById("form-add-subject-tag");
   const marginaliaRows         = document.getElementById("marginalia-rows");
@@ -879,18 +868,17 @@
   const aiJournalYear      = document.getElementById("ai-journal-year");
   const aiCompositionYear  = document.getElementById("ai-composition-year");
   const aiCompositionYearLabel = document.getElementById("ai-composition-year-label");
-  const aiSubjectPeriod    = document.getElementById("ai-subject-period");
   const aiSubjectTagsRows  = document.getElementById("ai-subject-tags-rows");
   const aiAddSubjectTagBtn = document.getElementById("ai-add-subject-tag");
   const aiConfirmSaveBtn   = document.getElementById("ai-confirm-save-btn");
   const aiConfirmCancelBtn = document.getElementById("ai-confirm-cancel-btn");
+  const editSpRows         = document.getElementById("edit-sp-rows");
+  const editAddSpBtn       = document.getElementById("edit-add-sp-btn");
+  const aiSpRows           = document.getElementById("ai-sp-rows");
+  const aiAddSpBtn         = document.getElementById("ai-add-sp-btn");
   // Numeric year coordinate inputs
   const aiComposedYear     = document.getElementById("ai-composed-year");
-  const aiSubjectStart     = document.getElementById("ai-subject-start");
-  const aiSubjectEnd       = document.getElementById("ai-subject-end");
   const editComposedYear   = document.getElementById("edit-composed-year");
-  const editSubjectStart   = document.getElementById("edit-subject-start");
-  const editSubjectEnd     = document.getElementById("edit-subject-end");
 
   const SUBMIT_DEFAULT_LABEL = "Save entry";
   const SUBMIT_LOADING_LABEL = "Looking up\u2026";
@@ -1071,9 +1059,7 @@
     modeSel.addEventListener("change", syncVisibility);
     syncVisibility(); // apply immediately on wire
   }
-  // Wire AI confirm panel control on page load (always in DOM)
-  wireSubjectEndControl("ai-subject-end-mode", "ai-subject-end");
-  // Edit control is wired inside loadEntryForEditing (only exists when edit section is open)
+
 
 
 
@@ -1134,9 +1120,161 @@
   // ── UI state ──────────────────────────────────────────────────────────────
   function hideApiError() { apiFallback.hidden = true; apiErrorMsg.textContent = ""; }
   function showApiError(msg) { apiErrorMsg.textContent = msg; apiFallback.hidden = false; }
-  function hideAiPanel() { aiConfirmPanel.hidden = true; aiSubjectTagsRows.innerHTML = ""; pendingSnapshot = null; }
+  function hideAiPanel() { aiConfirmPanel.hidden = true; aiSubjectTagsRows.innerHTML = ""; if (aiSpRows) aiSpRows.innerHTML = ""; pendingSnapshot = null; }
+
+  // ── Subject period rows ──────────────────────────────────────────────────
+
+  /** Normalise a raw subjectPeriods value from storage, handling old single-period format. */
+  function normalizeSubjectPeriods(entry) {
+    // New format: array on entry.subjectPeriods
+    if (Array.isArray(entry.subjectPeriods) && entry.subjectPeriods.length > 0) {
+      return entry.subjectPeriods;
+    }
+    // Migrate old single-period fields
+    const label = str(entry.subjectPeriod || "");
+    const start = entry.subjectStart !== undefined ? entry.subjectStart : null;
+    const end   = entry.subjectEnd   !== undefined ? entry.subjectEnd   : null;
+    if (label || start !== null || end !== null) {
+      return [{ label, start, end, color: entry.customColor || null }];
+    }
+    return [];
+  }
+
+  /** Append one editable subject period row to container. */
+  function appendSpRow(period, container) {
+    const label = period ? str(period.label || "") : "";
+    const start = period ? period.start : null;
+    const end   = period ? period.end   : null;
+    const color = period ? (period.color || null) : null;
+
+    const row = document.createElement("div"); row.className = "sp-row";
+
+    // Top: label input + remove button
+    const top = document.createElement("div"); top.className = "sp-row-top";
+    const labelInp = document.createElement("input"); labelInp.type = "text";
+    labelInp.className = "sp-row-label"; labelInp.setAttribute("data-field","label");
+    labelInp.setAttribute("autocomplete","off"); labelInp.placeholder = "e.g. German Idealism, c. 1780–1840";
+    labelInp.value = label;
+    const rmBtn = document.createElement("button"); rmBtn.type = "button";
+    rmBtn.className = "sp-row-remove"; rmBtn.setAttribute("aria-label","Remove"); rmBtn.textContent = "×";
+    top.appendChild(labelInp); top.appendChild(rmBtn); row.appendChild(top);
+
+    // Coords: start | end-hybrid | color swatch
+    const coords = document.createElement("div"); coords.className = "sp-row-coords";
+
+    // Start year
+    const startInp = document.createElement("input"); startInp.type = "number";
+    startInp.setAttribute("data-field","start"); startInp.placeholder = "Start year";
+    startInp.title = "Start year (BCE = negative)";
+    if (start !== null && start !== undefined) startInp.value = String(start);
+    coords.appendChild(startInp);
+
+    // End: hybrid select + number
+    const endWrap = document.createElement("div"); endWrap.className = "subject-end-wrap";
+    const endMode = document.createElement("select"); endMode.setAttribute("data-field","end-mode");
+    endMode.title = "End year";
+    const optYear = document.createElement("option"); optYear.value = "year"; optYear.textContent = "Enter end year…";
+    const optPres = document.createElement("option"); optPres.value = "present"; optPres.textContent = "Present";
+    endMode.appendChild(optYear); endMode.appendChild(optPres);
+    const endInp = document.createElement("input"); endInp.type = "number";
+    endInp.setAttribute("data-field","end"); endInp.placeholder = "e.g. 1840";
+    endInp.title = "End year (BCE = negative)";
+    if (isPresent(end)) {
+      endMode.value = "present"; endInp.hidden = true;
+    } else {
+      endMode.value = "year"; endInp.hidden = false;
+      if (end !== null && end !== undefined) endInp.value = String(end);
+    }
+    endMode.addEventListener("change", function () {
+      endInp.hidden = endMode.value === "present";
+      if (endMode.value === "present") endInp.value = "";
+    });
+    endWrap.appendChild(endMode); endWrap.appendChild(endInp);
+    coords.appendChild(endWrap);
+
+    // Color swatch
+    const resolvedColor = hexColor(color || "#6b7180");
+    const swatch = document.createElement("div"); swatch.className = "sp-color-swatch";
+    swatch.style.background = resolvedColor; swatch.title = "Choose color";
+    swatch.setAttribute("data-field","color"); swatch.setAttribute("data-color", resolvedColor);
+    swatch.addEventListener("click", function (ev) {
+      ev.stopPropagation();
+      openSpColorPopover(swatch, resolvedColor, function (newColor) {
+        swatch.style.background = newColor || "#6b7180";
+        swatch.setAttribute("data-color", newColor || "");
+      });
+    });
+    coords.appendChild(swatch);
+
+    row.appendChild(coords);
+    container.appendChild(row);
+    return row;
+  }
+
+  /** Collect subject periods from a container. */
+  function collectSpFromContainer(container) {
+    const out = [];
+    container.querySelectorAll(".sp-row").forEach(function (row) {
+      const labelEl  = row.querySelector('[data-field="label"]');
+      const startEl  = row.querySelector('[data-field="start"]');
+      const modeEl   = row.querySelector('[data-field="end-mode"]');
+      const endEl    = row.querySelector('[data-field="end"]');
+      const colorEl  = row.querySelector('[data-field="color"]');
+      const label = labelEl ? str(labelEl.value) : "";
+      const start = startEl && startEl.value !== "" ? parseInt(startEl.value, 10) : null;
+      const end   = modeEl && modeEl.value === "present" ? "present"
+                  : (endEl && endEl.value !== "" ? parseInt(endEl.value, 10) : null);
+      const color = colorEl ? (colorEl.getAttribute("data-color") || null) : null;
+      if (!label && start === null && end === null) return;
+      out.push({ label, start, end: isNaN(end) ? null : end, color: color || null });
+    });
+    return out;
+  }
+
+  /** Render subject period editor from array. */
+  function renderSpEditor(periods, container) {
+    container.innerHTML = "";
+    const list = Array.isArray(periods) ? periods : [];
+    if (list.length === 0) {
+      appendSpRow(null, container); // one blank starter
+    } else {
+      list.forEach(function (p) { appendSpRow(p, container); });
+    }
+  }
+
+  /** Mini color popover for subject period swatches. */
+  let _spPopoverSwatch = null, _spPopoverCallback = null;
+  const spColorPopover = document.createElement("div");
+  spColorPopover.className = "color-popover"; spColorPopover.setAttribute("hidden","");
+  document.body.appendChild(spColorPopover);
+
+  function openSpColorPopover(swatchEl, currentColor, onChange) {
+    _spPopoverSwatch = swatchEl; _spPopoverCallback = onChange;
+    spColorPopover.innerHTML = "";
+    SWATCH_PALETTE.forEach(function (hex) {
+      const dot = document.createElement("div"); dot.className = "color-swatch-option";
+      if (hex === currentColor) dot.classList.add("is-selected");
+      dot.style.background = hex; dot.title = hex;
+      dot.addEventListener("click", function (ev) {
+        ev.stopPropagation();
+        const cb = _spPopoverCallback;
+        spColorPopover.setAttribute("hidden","");
+        if (cb) cb(hex);
+      });
+      spColorPopover.appendChild(dot);
+    });
+    spColorPopover.removeAttribute("hidden");
+    const rect = swatchEl.getBoundingClientRect();
+    const pw = spColorPopover.offsetWidth || 148;
+    let left = rect.left, top = rect.bottom + 6;
+    if (left + pw > window.innerWidth - 8) left = window.innerWidth - pw - 8;
+    spColorPopover.style.left = left + "px"; spColorPopover.style.top = top + "px";
+  }
+  spColorPopover.addEventListener("click", function (ev) { ev.stopPropagation(); });
+  document.addEventListener("click", function () { spColorPopover.setAttribute("hidden",""); });
 
   // ── Subject tag rows ──────────────────────────────────────────────────────
+
   function normalizeGranularity(g) {
     const v = str(String(g == null ? "" : g)).toLowerCase();
     return GRANULARITY_LEVELS.indexOf(v) !== -1 ? v : "mid";
@@ -1297,11 +1435,8 @@
     hideApiError(); hideAiPanel();
     editIndicator.hidden = true; editIndicatorTitle.textContent = "";
     editSection.hidden = true;
-    formSubjectTagsRows.innerHTML = ""; editSubjectPeriodInput.value = "";
-    if (editSubjectStart)  editSubjectStart.value  = "";
-    if (editSubjectEnd)    editSubjectEnd.value    = "";
-    const _esm = document.getElementById("edit-subject-end-mode");
-    if (_esm) { _esm.value = "year"; editSubjectEnd.hidden = false; }
+    if (editSpRows) editSpRows.innerHTML = "";
+    if (editSpRows) editSpRows.innerHTML = "";
     if (editComposedYear)  editComposedYear.value  = "";
     marginaliaRows.innerHTML = "";
     submitBtn.disabled = false; submitBtn.textContent = SUBMIT_DEFAULT_LABEL;
@@ -1447,14 +1582,20 @@
       aiCompositionYear.value = pick(parsed.compositionYear, snapshot.compositionYearRange);
       setNumInput(aiComposedYear, nullableInt(parsed.composedStart));
     }
-    aiSubjectPeriod.value = pick(parsed.subjectPeriod, "");
-    setNumInput(aiSubjectStart, nullableInt(parsed.subjectStart));
-    // Handle "present" for subject end
-    const rawSubjectEnd = parsed.subjectEnd;
-    const subjectEndVal = (rawSubjectEnd !== null && rawSubjectEnd !== undefined &&
-        String(rawSubjectEnd).toLowerCase().trim() === "present")
-      ? "present" : nullableInt(rawSubjectEnd);
-    setSubjectEnd("ai-subject-end-mode", "ai-subject-end", subjectEndVal);
+    // Populate subject periods
+    const rawSps = parsed.subjectPeriods;
+    let spList = [];
+    if (Array.isArray(rawSps) && rawSps.length > 0) {
+      spList = rawSps.map(function (sp) {
+        const endRaw = sp.end !== undefined ? sp.end : sp.subjectEnd;
+        const endVal = isPresent(endRaw) ? "present" : nullableInt(endRaw);
+        return { label: str(String(sp.label || "")), start: nullableInt(sp.start !== undefined ? sp.start : sp.subjectStart), end: endVal, color: null };
+      });
+    } else if (parsed.subjectPeriod) {
+      const endRaw = parsed.subjectEnd;
+      spList = [{ label: str(parsed.subjectPeriod), start: nullableInt(parsed.subjectStart), end: isPresent(endRaw) ? "present" : nullableInt(endRaw), color: null }];
+    }
+    renderSpEditor(spList, aiSpRows);
     renderTagEditor(normalizeSubjectTagsFromAi(parsed), aiSubjectTagsRows);
   }
 
@@ -1480,9 +1621,7 @@
       journalVolume:        isArticle ? str(aiJournalVolume.value) : "",
       journalNumber:        isArticle ? str(aiJournalNumber.value) : "",
       journalYear:          isArticle ? str(aiJournalYear.value)   : "",
-      subjectPeriod:        str(aiSubjectPeriod.value),
-      subjectStart:         getNumInput(aiSubjectStart),
-      subjectEnd:           getSubjectEnd("ai-subject-end-mode", "ai-subject-end"),
+      subjectPeriods:       collectSpFromContainer(aiSpRows),
       subjectTags:          collectTagsFromContainer(aiSubjectTagsRows),
       generalNotes:         s.generalNotes,
       marginalia:           existingMarginalia,
@@ -1513,7 +1652,7 @@
       compositionCertainty: isArticle ? "" : s.compositionCertainty,
       journalName: isArticle ? s.journalName : "", journalVolume: isArticle ? s.journalVolume : "",
       journalNumber: isArticle ? s.journalNumber : "", journalYear: isArticle ? s.journalYear : "",
-      subjectPeriod: "", subjectTags: [], generalNotes: s.generalNotes, marginalia: [],
+      subjectPeriods: [], subjectTags: [], generalNotes: s.generalNotes, marginalia: [],
       createdAt: new Date().toISOString(),
     });
     resetFormUi();
@@ -1553,10 +1692,7 @@
 
     editIndicator.hidden = false; editIndicatorTitle.textContent = str(entry.title);
     editSection.hidden = false;
-    wireSubjectEndControl("edit-subject-end-mode", "edit-subject-end");  // wire now that control is visible
-    editSubjectPeriodInput.value = str(entry.subjectPeriod);
-    setNumInput(editSubjectStart, entry.subjectStart !== undefined ? entry.subjectStart : null);
-    setSubjectEnd("edit-subject-end-mode", "edit-subject-end", entry.subjectEnd !== undefined ? entry.subjectEnd : null);
+    renderSpEditor(normalizeSubjectPeriods(entry), editSpRows);
     setNumInput(editComposedYear, entry.composedStart !== undefined ? entry.composedStart : null);
     renderTagEditor(entry.subjectTags || [], formSubjectTagsRows);
     renderMarginaliaEditor(entry.marginalia || [], marginaliaRows);
@@ -1584,17 +1720,23 @@
   function appendTemporalBlock(li, e) {
     const isArticle = str(e.entryType) === "article";
     const comp = isArticle ? (str(e.journalYear) || str(e.compositionYearRange)) : formatComposition(e.compositionYearRange, e.compositionCertainty);
-    const subj = str(e.subjectPeriod);
-    if (!comp && !subj) return;
+    const sps  = normalizeSubjectPeriods(e);
+    if (!comp && sps.length === 0) return;
     const grid = document.createElement("div"); grid.className = "entry-temporal";
-    function makeItem(lbl, val, mod) {
+    function makeItem(lbl, val, mod, borderColor) {
       const item = document.createElement("div"); item.className = "entry-temporal-item " + mod;
+      if (borderColor) item.style.borderLeftColor = borderColor;
       const l = document.createElement("div"); l.className = "entry-temporal-label"; l.textContent = lbl;
       const v = document.createElement("div"); v.className = "entry-temporal-value"; v.textContent = val;
       item.appendChild(l); item.appendChild(v); return item;
     }
-    if (comp) grid.appendChild(makeItem(isArticle ? "Published" : "Composed", comp, "entry-temporal-item--composed"));
-    if (subj) grid.appendChild(makeItem("Subject period", subj, "entry-temporal-item--subject"));
+    if (comp) grid.appendChild(makeItem(isArticle ? "Published" : "Composed", comp, "entry-temporal-item--composed", null));
+    sps.forEach(function (sp, si) {
+      const label = str(sp.label) || "Subject period";
+      const dispEnd = isPresent(sp.end) ? "Present" : formatYear(sp.end);
+      const range = sp.start !== null ? formatYear(sp.start) + " – " + dispEnd : str(sp.label);
+      grid.appendChild(makeItem(si === 0 ? "Subject period" : "Also", range || label, "entry-temporal-item--subject", sp.color || null));
+    });
     li.appendChild(grid);
   }
 
@@ -1763,6 +1905,8 @@
   saveWithoutAiBtn.addEventListener("click", async function() { await savePlainFromPending(); });
 
   aiAddSubjectTagBtn.addEventListener("click", function () { appendSubjectTagRow({period:"",dateRange:"",granularity:"specific"}, aiSubjectTagsRows); });
+  if (aiAddSpBtn) aiAddSpBtn.addEventListener("click", function () { appendSpRow(null, aiSpRows); });
+  if (editAddSpBtn) editAddSpBtn.addEventListener("click", function () { appendSpRow(null, editSpRows); });
   formAddSubjectTagBtn.addEventListener("click", function () { appendSubjectTagRow({period:"",dateRange:"",granularity:"specific"}, formSubjectTagsRows); });
   addMarginaliaBtnEl.addEventListener("click", function () { appendMarginaleRow(null, marginaliaRows); });
 
@@ -1771,7 +1915,9 @@
     const tagRemove = ev.target.closest(".ai-tag-row-remove");
     if (tagRemove) { const row = tagRemove.closest(".ai-tag-row"); if (row) row.remove(); return; }
     const mRemove = ev.target.closest(".marginalia-remove");
-    if (mRemove) { const row = mRemove.closest(".marginalia-row"); if (row) row.remove(); }
+    if (mRemove) { const row = mRemove.closest(".marginalia-row"); if (row) row.remove(); return; }
+    const spRemove = ev.target.closest(".sp-row-remove");
+    if (spRemove) { const row = spRemove.closest(".sp-row"); if (row) row.remove(); }
   });
 
   aiConfirmSaveBtn.addEventListener("click", async function() { await saveEntryFromConfirmInputs(); });
@@ -1821,9 +1967,7 @@
         composedEnd:   isArticle ? nullableInt(snapshot.journalYear) : getNumInput(editComposedYear),
         journalName: isArticle ? snapshot.journalName : "", journalVolume: isArticle ? snapshot.journalVolume : "",
         journalNumber: isArticle ? snapshot.journalNumber : "", journalYear: isArticle ? snapshot.journalYear : "",
-        subjectPeriod:  str(editSubjectPeriodInput.value),
-        subjectStart:   getNumInput(editSubjectStart),
-        subjectEnd:     getSubjectEnd("edit-subject-end-mode", "edit-subject-end"),
+        subjectPeriods: collectSpFromContainer(editSpRows),
         subjectTags:    collectTagsFromContainer(formSubjectTagsRows),
         generalNotes:   snapshot.generalNotes,
         marginalia:     collectMarginaliaFromContainer(marginaliaRows),
@@ -1901,12 +2045,14 @@
   async function plottableEntries() {
     const all = await loadEntries();
     return all.filter(function (e) {
-      const hasSubjectEnd = e.subjectEnd !== null && e.subjectEnd !== undefined;
-      const hasCoords = e.composedStart !== null && e.composedStart !== undefined &&
-                        e.subjectStart  !== null && e.subjectStart  !== undefined &&
-                        hasSubjectEnd;
-      if (!hasCoords) return false;
-      // Apply engagement filter — if set is empty show nothing; if all on show all
+      if (e.composedStart === null || e.composedStart === undefined) return false;
+      // Must have at least one subject period with start+end coords
+      const sps = normalizeSubjectPeriods(e);
+      const hasPlottableSp = sps.some(function (sp) {
+        return sp.start !== null && sp.start !== undefined &&
+               sp.end   !== null && sp.end   !== undefined;
+      });
+      if (!hasPlottableSp) return false;
       if (activeEngagementLevels.size === 0) return false;
       if (activeEngagementLevels.size === ENGAGEMENT_LEVELS.length) return true;
       return activeEngagementLevels.has(str(e.engagement));
@@ -1971,11 +2117,19 @@
 
     // ── X scale (full data range) ─────────────────────────────────────────
     const xMin = Math.min(
-      d3.min(sorted, function (e) { return Math.min(e.subjectStart, e.composedStart); }),
+      d3.min(sorted, function (e) {
+        const sps = normalizeSubjectPeriods(e);
+        const spMin = sps.reduce(function (m, sp) { return sp.start !== null ? Math.min(m, sp.start) : m; }, Infinity);
+        return Math.min(spMin === Infinity ? e.composedStart : spMin, e.composedStart);
+      }),
       d3.min(ERA_BANDS, function (b) { return b.start; })
     );
     const xMax = Math.max(
-      d3.max(sorted, function (e) { return Math.max(resolveSubjectEnd(e.subjectEnd) || 0, e.composedStart, e.composedEnd || e.composedStart); }),
+      d3.max(sorted, function (e) {
+        const sps = normalizeSubjectPeriods(e);
+        const spMax = sps.reduce(function (m, sp) { return Math.max(m, resolveSubjectEnd(sp.end) || 0); }, 0);
+        return Math.max(spMax, e.composedStart, e.composedEnd || e.composedStart);
+      }),
       d3.max(ERA_BANDS, function (b) { return b.end; }),
       new Date().getFullYear()
     );
@@ -2055,49 +2209,54 @@
         const y     = i * TL.rowH + TL.rowH / 2;
         const broad = (Array.isArray(entry.subjectTags) && entry.subjectTags[0])
           ? str(entry.subjectTags[0].period) : "";
-        const color = entry.customColor || tlTagColor(broad);
-
-        const x1  = xScale(entry.subjectStart);
-        const resolvedEnd = resolveSubjectEnd(entry.subjectEnd) || entry.subjectStart;
-        const x2  = xScale(resolvedEnd);
-        const barW = Math.max(TL.minBarW, x2 - x1);
+        const entryDefaultColor = entry.customColor || tlTagColor(broad);
         const dotX = xScale(entry.composedStart);
+        const sps  = normalizeSubjectPeriods(entry);
 
-        // Bar
-        layerBars.append("rect")
-          .attr("class", "tl-bar")
-          .attr("x", x1).attr("y", y - TL.barH / 2)
-          .attr("width", barW).attr("height", TL.barH)
-          .attr("fill", color)
-          .attr("rx", 2)
-          .on("mouseenter", function (event) { showTooltip(event, entry, color); })
-          .on("mousemove",  function (event) { moveTooltip(event); })
-          .on("mouseleave", function ()      { hideTooltip(); });
+        // Draw one bar per subject period at the same Y
+        sps.forEach(function (sp, si) {
+          if (sp.start === null || sp.start === undefined) return;
+          const spEnd = resolveSubjectEnd(sp.end);
+          if (spEnd === null) return;
+          const barColor = sp.color || entryDefaultColor;
+          const x1  = xScale(sp.start);
+          const x2  = xScale(spEnd);
+          const barW = Math.max(TL.minBarW, x2 - x1);
+          // Offset multiple bars slightly so they don't overlap completely
+          const yOff = si === 0 ? 0 : si * 2;
+          const barY = y + yOff;
 
-        // Dot (composition year)
+          layerBars.append("rect")
+            .attr("class", "tl-bar")
+            .attr("x", x1).attr("y", barY - TL.barH / 2)
+            .attr("width", barW).attr("height", TL.barH)
+            .attr("fill", barColor).attr("rx", 2)
+            .on("mouseenter", function (event) { showTooltip(event, entry, barColor); })
+            .on("mousemove",  function (event) { moveTooltip(event); })
+            .on("mouseleave", function ()      { hideTooltip(); });
+
+          // Dashed connector when dot is outside this bar
+          if (dotX < x1 - 2 || dotX > x1 + barW + 2) {
+            const lineX1 = dotX < x1 ? dotX : x1 + barW;
+            const lineX2 = dotX < x1 ? x1   : dotX;
+            layerBars.append("line")
+              .attr("x1", lineX1).attr("x2", lineX2)
+              .attr("y1", barY).attr("y2", barY)
+              .attr("stroke", barColor).attr("stroke-width", 1)
+              .attr("stroke-dasharray", "2 2").attr("opacity", 0.45);
+          }
+        });
+
+        // Single composition dot — drawn on top of all bars
         layerBars.append("circle")
           .attr("class", "tl-dot")
           .attr("cx", dotX).attr("cy", y)
           .attr("r", TL.dotR)
-          .attr("fill", color)
-          .attr("stroke", "var(--bg)")
-          .attr("stroke-width", 2)
-          .on("mouseenter", function (event) { showTooltip(event, entry, color); })
+          .attr("fill", entryDefaultColor)
+          .attr("stroke", "var(--bg)").attr("stroke-width", 2)
+          .on("mouseenter", function (event) { showTooltip(event, entry, entryDefaultColor); })
           .on("mousemove",  function (event) { moveTooltip(event); })
           .on("mouseleave", function ()      { hideTooltip(); });
-
-        // Vertical line connecting dot to bar (when dot is outside bar)
-        if (dotX < x1 - 2 || dotX > x1 + barW + 2) {
-          const lineX1 = dotX < x1 ? dotX : x1 + barW;
-          const lineX2 = dotX < x1 ? x1   : dotX;
-          layerBars.append("line")
-            .attr("x1", lineX1).attr("x2", lineX2)
-            .attr("y1", y).attr("y2", y)
-            .attr("stroke", color)
-            .attr("stroke-width", 1)
-            .attr("stroke-dasharray", "2 2")
-            .attr("opacity", 0.45);
-        }
 
         // Title labels removed — tooltip on hover is sufficient
       });
@@ -2146,9 +2305,12 @@
     }
 
     row("Composed", entry.compositionYearRange || formatYear(entry.composedStart));
-    const subjectEndDisplay = isPresent(entry.subjectEnd) ? "Present" : formatYear(entry.subjectEnd);
-    row("Subject period", entry.subjectPeriod ||
-        (entry.subjectStart !== null ? formatYear(entry.subjectStart) + " – " + subjectEndDisplay : ""));
+    const ttSps = normalizeSubjectPeriods(entry);
+    ttSps.forEach(function (sp, si) {
+      const dispEnd = isPresent(sp.end) ? "Present" : formatYear(sp.end);
+      const val = str(sp.label) || (sp.start !== null ? formatYear(sp.start) + " – " + dispEnd : "");
+      if (val) row(si === 0 ? "Subject period" : "Also", val);
+    });
     row("Engagement", entry.engagement);
 
     if (broad || mid) {
