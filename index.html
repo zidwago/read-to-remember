@@ -1226,7 +1226,7 @@
                   : (endEl && endEl.value !== "" ? parseInt(endEl.value, 10) : null);
       const color = colorEl ? (colorEl.getAttribute("data-color") || null) : null;
       if (!label && start === null && end === null) return;
-      out.push({ label, start, end: isNaN(end) ? null : end, color: color || null });
+      out.push({ label, start, end: (isPresent(end) ? "present" : (isNaN(end) ? null : end)), color: color || null });
     });
     return out;
   }
@@ -2203,9 +2203,7 @@
           const x1  = xScale(sp.start);
           const x2  = xScale(spEnd);
           const barW = Math.max(TL.minBarW, x2 - x1);
-          // Offset multiple bars slightly so they don't overlap completely
-          const yOff = si === 0 ? 0 : si * 2;
-          const barY = y + yOff;
+          const barY = y;  // all bars at same vertical position as the dot
 
           layerBars.append("rect")
             .attr("class", "tl-bar")
@@ -2228,14 +2226,30 @@
           }
         });
 
+        // Dot color = color of whichever subject period contains composedStart
+        // Falls back to first period's color, then entryDefaultColor
+        var dotColor = entryDefaultColor;
+        for (var di = 0; di < sps.length; di++) {
+          var dsp = sps[di];
+          if (dsp.start === null) continue;
+          var dEnd = resolveSubjectEnd(dsp.end) !== null ? resolveSubjectEnd(dsp.end) : dsp.start;
+          if (entry.composedStart >= dsp.start && entry.composedStart <= dEnd) {
+            dotColor = dsp.color || entryDefaultColor;
+            break;
+          }
+        }
+        if (dotColor === entryDefaultColor && sps.length > 0 && sps[0].color) {
+          dotColor = sps[0].color; // fallback to first period color
+        }
+
         // Single composition dot — drawn on top of all bars
         layerBars.append("circle")
           .attr("class", "tl-dot")
           .attr("cx", dotX).attr("cy", y)
           .attr("r", TL.dotR)
-          .attr("fill", entryDefaultColor)
+          .attr("fill", dotColor)
           .attr("stroke", "var(--bg)").attr("stroke-width", 2)
-          .on("mouseenter", function (event) { showTooltip(event, entry, entryDefaultColor); })
+          .on("mouseenter", function (event) { showTooltip(event, entry, dotColor); })
           .on("mousemove",  function (event) { moveTooltip(event); })
           .on("mouseleave", function ()      { hideTooltip(); });
 
