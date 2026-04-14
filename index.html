@@ -774,17 +774,7 @@
   </div>
 </div>
 
-<div id="api-key-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="api-key-modal-title" hidden>
-  <div class="modal-dialog">
-    <h2 id="api-key-modal-title">Anthropic API key</h2>
-    <p class="modal-note">Your key is kept only in this browser tab's session storage. It is not written to the reading log or any other storage. Close the tab to clear it.</p>
-    <form id="api-key-form">
-      <label for="api-key-input" class="visually-hidden">API key</label>
-      <input type="password" id="api-key-input" name="apiKey" autocomplete="off" placeholder="sk-ant-…" required />
-      <div class="btn-row"><button type="submit" class="btn-primary">Continue</button></div>
-    </form>
-  </div>
-</div>
+
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -793,7 +783,7 @@
   "use strict";
 
   const STORAGE_KEY      = "readToRemember.entries";       // localStorage fallback key
-  const SESSION_API_KEY  = "readToRemember.anthropicApiKey";
+
   const SUPABASE_URL     = "https://caoqidivxhpfcaeymtsj.supabase.co";
   const SUPABASE_ANON    = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNhb3FpZGl2eGhwZmNhZXltdHNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMDgyMzgsImV4cCI6MjA5MTU4NDIzOH0.uwZURwfdytVDw1hco3hR7w2UeN4keN4gk1l7oJKRjno";
 
@@ -806,7 +796,7 @@
     }
   });
   let currentUser = null;   // set after auth
-  const ANTHROPIC_URL    = "https://api.anthropic.com/v1/messages";
+  const ANTHROPIC_URL    = "https://sparkling-salad-c196.kazimsherazee.workers.dev";
   const ANTHROPIC_MODEL  = "claude-sonnet-4-20250514";
   const ANTHROPIC_MAX_TOKENS = 1200;
 
@@ -875,9 +865,7 @@
   const formAddSubjectTagBtn   = document.getElementById("form-add-subject-tag");
   const marginaliaRows         = document.getElementById("marginalia-rows");
   const addMarginaliaBtnEl     = document.getElementById("add-marginalia-btn");
-  const apiKeyModal        = document.getElementById("api-key-modal");
-  const apiKeyForm         = document.getElementById("api-key-form");
-  const apiKeyInput        = document.getElementById("api-key-input");
+
   const apiFallback        = document.getElementById("api-fallback");
   const apiErrorMsg        = document.getElementById("api-error-msg");
   const saveWithoutAiBtn   = document.getElementById("save-without-ai-btn");
@@ -1087,22 +1075,9 @@
   wireSubjectEndControl("ai-subject-end-mode", "ai-subject-end");
   // Edit control is wired inside loadEntryForEditing (only exists when edit section is open)
 
-  // ── API key modal ─────────────────────────────────────────────────────────
-  if (!sessionStorage.getItem(SESSION_API_KEY)) {
-    apiKeyModal.removeAttribute("hidden");
-    queueMicrotask(function () { apiKeyInput.focus(); });
-  }
 
-  apiKeyForm.addEventListener("submit", function (ev) {
-    ev.preventDefault();
-    const key = str(apiKeyInput.value);
-    if (!key) return;
-    sessionStorage.setItem(SESSION_API_KEY, key);
-    apiKeyModal.setAttribute("hidden", "");
-    apiKeyInput.value = "";
-  });
 
-  function getAnthropicApiKey() { return sessionStorage.getItem(SESSION_API_KEY) || ""; }
+
   function newId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
 
   // ── Entry type switcher ───────────────────────────────────────────────────
@@ -1343,8 +1318,7 @@
   }
 
   async function fetchAnthropicEnrichment(snapshot) {
-    const apiKey = getAnthropicApiKey();
-    if (!apiKey) throw new Error("No API key in session. Refresh the page to enter your key.");
+
     const isArticle = snapshot.entryType === "article";
     let msg = "Type: " + (isArticle ? "article" : "book") + "\nTitle: " + snapshot.title + "\nCredit: " + snapshot.primaryCredit + "\nRole: " + snapshot.creditRole;
     if (isArticle) {
@@ -1355,7 +1329,7 @@
     }
     const res = await fetch(ANTHROPIC_URL, {
       method:"POST",
-      headers:{ "Content-Type":"application/json", "x-api-key":apiKey, "anthropic-version":"2023-06-01", "anthropic-dangerous-direct-browser-access":"true" },
+      headers:{ "Content-Type":"application/json" },
       body: JSON.stringify({ model:ANTHROPIC_MODEL, max_tokens:ANTHROPIC_MAX_TOKENS, system:SYSTEM_PROMPT, messages:[{role:"user",content:msg}] }),
     });
     const rawText = await res.text();
@@ -1808,7 +1782,6 @@
   cancelEditBtn.addEventListener("click", resetFormUi);
 
   reEnrichBtn.addEventListener("click", function () {
-    if (!getAnthropicApiKey()) { apiKeyModal.removeAttribute("hidden"); return; }
     const snapshot = captureFormSnapshot();
     if (!snapshot.title || !snapshot.primaryCredit) return;
     hideApiError(); hideAiPanel(); pendingSnapshot = snapshot;
@@ -1861,7 +1834,6 @@
     }
 
     // Create mode: AI enrichment
-    if (!getAnthropicApiKey()) { apiKeyModal.removeAttribute("hidden"); return; }
     const snapshot = captureFormSnapshot();
     if (!snapshot.title || !snapshot.primaryCredit) return;
     hideApiError(); hideAiPanel(); pendingSnapshot = snapshot;
