@@ -276,6 +276,30 @@
     /* General notes in entry card */
     .entry-general-notes { margin-top:0.65rem; padding-top:0.65rem; border-top:1px solid var(--border); font-size:0.9rem; color:var(--muted); white-space:pre-wrap; }
 
+    /* ── Child note (nested under a quote) ── */
+    .marginalia-child-note-wrap {
+      margin-top: 0.45rem; padding-top: 0.45rem;
+      border-top: 1px dashed var(--border);
+    }
+    .marginalia-child-note-label {
+      font-size: 0.65rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--muted); margin-bottom: 0.25rem; display: block;
+    }
+    .btn-add-child-note {
+      font-family: var(--font-body); font-size: 0.78rem; color: var(--muted);
+      background: transparent; border: none; padding: 0; cursor: pointer;
+      text-decoration: underline; text-underline-offset: 3px; margin-top: 0.35rem; display: block;
+    }
+    .btn-add-child-note:hover { color: var(--text); }
+    /* Display in entry card */
+    .marginalia-item-child-note {
+      margin-top: 0.4rem; padding-top: 0.4rem; padding-left: 0.75rem;
+      border-top: 1px dashed var(--border);
+      border-left: 2px solid var(--border);
+      font-size: 0.85rem; color: var(--muted); line-height: 1.5;
+      font-style: normal; white-space: pre-wrap;
+    }
+
     /* ── Entry color swatch ── */
     .entry-color-swatch {
       width: 18px; height: 18px; border-radius: 50%;
@@ -1377,6 +1401,31 @@
     textArea.placeholder = "Quote, note, question, or cross-reference…"; textArea.value = text;
     textWrap.appendChild(textLbl); textWrap.appendChild(textArea);
 
+    // Child note (quotes only)
+    const childNoteVal = item ? str(String(item.childNote || "")) : "";
+    const childWrap = document.createElement("div"); childWrap.className = "marginalia-child-note-wrap";
+    const childLbl  = document.createElement("span"); childLbl.className = "marginalia-child-note-label"; childLbl.textContent = "Note on this quote";
+    const childArea = document.createElement("textarea"); childArea.setAttribute("data-field","childNote");
+    childArea.placeholder = "Your commentary on this quote\u2026"; childArea.value = childNoteVal;
+    childArea.style.minHeight = "3.5rem";
+    childWrap.appendChild(childLbl); childWrap.appendChild(childArea);
+    const addChildBtn = document.createElement("button"); addChildBtn.type = "button";
+    addChildBtn.className = "btn-add-child-note"; addChildBtn.textContent = "\u21b3 Add note on this quote";
+    function syncChildNote(kind) {
+      const isQ = kind === "quote";
+      if (isQ) {
+        if (!childArea.value) { addChildBtn.style.display = "block"; childWrap.style.display = "none"; }
+        else { addChildBtn.style.display = "none"; childWrap.style.display = "block"; }
+      } else { addChildBtn.style.display = "none"; childWrap.style.display = "none"; }
+    }
+    syncChildNote(safeKind);
+    kindSel.addEventListener("change", function () { syncChildNote(kindSel.value); });
+    addChildBtn.addEventListener("click", function () {
+      addChildBtn.style.display = "none"; childWrap.style.display = "block"; childArea.focus();
+    });
+    textWrap.appendChild(addChildBtn); textWrap.appendChild(childWrap);
+
+
     // Remove
     const rmBtn = document.createElement("button"); rmBtn.type = "button"; rmBtn.className = "marginalia-remove";
     rmBtn.setAttribute("aria-label","Remove"); rmBtn.textContent = "\u00d7";
@@ -1396,7 +1445,11 @@
       const kind = kindEl ? str(kindEl.value) : "note";
       const text = textEl ? str(textEl.value) : "";
       if (!text) return;
-      out.push({ id: newId(), page, kind: MARGINALIA_KINDS.indexOf(kind) !== -1 ? kind : "note", text });
+      const childNoteEl = row.querySelector('[data-field="childNote"]');
+      const childNote = childNoteEl ? str(childNoteEl.value) : "";
+      const item = { id: newId(), page, kind: MARGINALIA_KINDS.indexOf(kind) !== -1 ? kind : "note", text };
+      if (childNote) item.childNote = childNote;
+      out.push(item);
     });
     return out;
   }
@@ -1795,6 +1848,11 @@
         const kd = document.createElement("span"); kd.className = "marginalia-item-kind"; kd.textContent = MARGINALIA_KIND_LABELS[item.kind] || "Note";
         meta.appendChild(kd); div.appendChild(meta);
         const tx = document.createElement("div"); tx.className = "marginalia-item-text"; tx.textContent = str(String(item.text || "")); div.appendChild(tx);
+        // Child note under quote
+        if (item.kind === "quote" && str(String(item.childNote || ""))) {
+          const cn = document.createElement("div"); cn.className = "marginalia-item-child-note";
+          cn.textContent = str(String(item.childNote)); div.appendChild(cn);
+        }
         list.appendChild(div);
       });
 
