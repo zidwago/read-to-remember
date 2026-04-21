@@ -348,6 +348,12 @@
     .entry-updated-note { font-size:0.78rem; color:var(--muted); margin-right:auto; }
     .entry-edit-btn { font-family:var(--font-body); font-size:0.8rem; font-weight:600; padding:0.28rem 0.65rem; color:var(--muted); background:transparent; border:1px solid var(--border); border-radius:5px; cursor:pointer; }
     .entry-edit-btn:hover { color:var(--text); border-color:var(--muted); }
+    .entry-delete-btn {
+      font-family:var(--font-body); font-size:0.8rem; font-weight:600;
+      padding:0.28rem 0.65rem; color:var(--muted); background:transparent;
+      border:1px solid var(--border); border-radius:5px; cursor:pointer;
+    }
+    .entry-delete-btn:hover { color:#e8a598; border-color:#e8a598; }
     .entry-plotted-badge {
       font-size:0.72rem; font-weight:600; letter-spacing:0.04em;
       padding:0.15rem 0.5rem; border-radius:3px; flex-shrink:0;
@@ -1024,6 +1030,24 @@
     // localStorage mirror (offline resilience)
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(entries)); } catch {}
     // No bulk-save path — individual upserts are used instead
+  }
+
+  async function deleteEntry(entryId) {
+    // Remove from localStorage mirror
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const arr = JSON.parse(raw);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(arr.filter(function (e) { return e.id !== entryId; })));
+      }
+    } catch {}
+    // Remove from Supabase
+    if (currentUser) {
+      const { error } = await sb.from("entries").delete().eq("id", entryId).eq("user_id", currentUser.id);
+      if (error) console.error("deleteEntry:", error);
+    }
+    await refreshList();
+    buildTimeline();
   }
 
   async function upsertEntry(entry) {
@@ -1922,6 +1946,9 @@
 
 
 
+    const deleteBtn = document.createElement("button"); deleteBtn.type = "button"; deleteBtn.className = "entry-delete-btn";
+    deleteBtn.setAttribute("data-entry-id", e.id); deleteBtn.textContent = "Delete";
+    footer.appendChild(deleteBtn);
     const editBtn = document.createElement("button"); editBtn.type = "button"; editBtn.className = "entry-edit-btn";
     editBtn.setAttribute("data-entry-id", e.id); editBtn.textContent = "Edit";
     footer.appendChild(editBtn); li.appendChild(footer);
@@ -1978,8 +2005,20 @@
   });
 
   entriesList.addEventListener("click", async function (ev) {
-    // Ignore clicks originating from the color swatch — it handles itself
     if (ev.target.closest(".entry-color-swatch")) return;
+    // Delete
+    const delBtn = ev.target.closest(".entry-delete-btn");
+    if (delBtn) {
+      const id = delBtn.getAttribute("data-entry-id");
+      const _all = await loadEntries();
+      const entry = _all.find(function (e) { return e.id === id; });
+      const title = entry ? str(entry.title) : "this entry";
+      if (confirm("Delete “" + title + "”? This cannot be undone.")) {
+        await deleteEntry(id);
+      }
+      return;
+    }
+    // Edit
     const btn = ev.target.closest(".entry-edit-btn");
     if (!btn) return;
     const _all = await loadEntries(); const entry = _all.find(function (e) { return e.id === btn.getAttribute("data-entry-id"); });
