@@ -85,6 +85,14 @@
 
     /* ── Reading list ── */
     .list-heading { font-family:var(--font-heading); font-size:1.1rem; font-weight:600; margin:0 0 1rem; }
+    .log-header { display:flex; align-items:baseline; justify-content:space-between; gap:1rem; margin-bottom:1rem; flex-wrap:wrap; }
+    .export-controls { display:flex; align-items:baseline; gap:0.4rem; font-size:0.82rem; }
+    .export-controls[hidden] { display:none !important; }
+    .export-label { color:var(--muted); font-size:0.75rem; text-transform:uppercase; letter-spacing:0.06em; font-weight:600; }
+    .export-btn { font-family:var(--font-body); font-size:0.85rem; padding:0; color:var(--accent); background:transparent; border:none; cursor:pointer; text-decoration:underline; text-underline-offset:3px; }
+    .export-btn:hover { color:#d4b88a; }
+    .export-btn:disabled { opacity:0.5; cursor:not-allowed; text-decoration:none; }
+    .export-sep { color:var(--muted); }
     .entries { list-style:none; margin:0; padding:0; }
     .entry { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:1.15rem 1.25rem; margin-bottom:0.85rem; box-shadow:var(--shadow); }
     .entry-type-badge { display:inline-block; font-size:0.62rem; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; padding:0.15rem 0.45rem; border-radius:3px; margin-bottom:0.45rem; }
@@ -771,7 +779,15 @@
   </section>
 
   <section aria-labelledby="list-heading" style="margin-top:2.5rem;">
-    <h2 id="list-heading" class="list-heading">Your log</h2>
+    <div class="log-header">
+      <h2 id="list-heading" class="list-heading" style="margin:0;">Your log</h2>
+      <div class="export-controls" id="export-controls" hidden>
+        <span class="export-label">Export:</span>
+        <button type="button" class="export-btn" id="export-log-btn" title="A clean, scannable list of your reading.">Reading log</button>
+        <span class="export-sep" aria-hidden="true">·</span>
+        <button type="button" class="export-btn" id="export-notebook-btn" title="Reading log plus all marginalia and notes.">Full notebook</button>
+      </div>
+    </div>
     <ul class="entries" id="entries-list"></ul>
     <p class="empty-state" id="empty-state">No entries yet. Add one above.</p>
   </section>
@@ -1091,6 +1107,261 @@
       if (error) { console.error("migrateLocalEntries:", error); return; }
       console.log("Migrated", rows.length, "local entries to Supabase");
     } catch (e) { console.error("migrateLocalEntries:", e); }
+  }
+
+  // ── Markdown export ────────────────────────────────────────────────────────
+  // Two modes:
+  //   "log"      — title, author, when written, what era, tags. A scannable bibliography.
+  //   "notebook" — everything in the log, plus general notes and all marginalia.
+  // Both reverse-chronological by createdAt (most recent reading first).
+
+  /** Format a JS Date (or ISO string) as DD/MM/YYYY for the export header. */
+  function formatExportDate(d) {
+    const dt = (d instanceof Date) ? d : new Date(d);
+    if (isNaN(dt.getTime())) return "";
+    const dd = String(dt.getDate()).padStart(2, "0");
+    const mm = String(dt.getMonth() + 1).padStart(2, "0");
+    const yyyy = dt.getFullYear();
+    return dd + "/" + mm + "/" + yyyy;
+  }
+
+  /** Format DD/MM/YYYY into YYYY-MM-DD for the filename (sortable). */
+  function todayForFilename() {
+    const dt = new Date();
+    const yyyy = dt.getFullYear();
+    const mm = String(dt.getMonth() + 1).padStart(2, "0");
+    const dd = String(dt.getDate()).padStart(2, "0");
+    return yyyy + "-" + mm + "-" + dd;
+  }
+
+  /** Escape characters that have meaning in Markdown so user text renders verbatim. */
+  function mdEscape(s) {
+    if (!s) return "";
+    // Only escape characters that meaningfully change rendering mid-line:
+    // backticks (code), asterisks/underscores (emphasis), brackets (links), backslashes.
+    return String(s).replace(/([\\`*_\[\]])/g, "\\$1");
+  }
+
+  /** Build the "Reading log" markdown — clean bibliographic list. */
+  function buildReadingLogMd(entries) {
+    const lines = [];
+    lines.push("# Reading log");
+    lines.push("");
+    lines.push("_Exported " + formatExportDate(new Date()) + " from Read to Remember._");
+    lines.push("");
+    lines.push("---");
+    lines.push("");
+
+    if (entries.length === 0) {
+      lines.push("_No entries._");
+      return lines.join("\n");
+    }
+
+    entries.forEach(function (e, i) {
+      const title = mdEscape(e.title || "Untitled");
+      const credit = mdEscape(e.primaryCredit || "");
+      const role = e.creditRole && e.creditRole !== "author" ? " (" + mdEscape(e.creditRole) + ")" : "";
+
+      // Title line — italic for articles, bold for books, following bibliographic convention.
+      if (e.entryType === "article") {
+        lines.push("### " + title);
+      } else {
+        lines.push("### *" + title + "*");
+      }
+
+      // Author line
+      if (credit) lines.push(credit + role);
+
+      // Article: journal citation
+      if (e.entryType === "article" && (e.journalName || e.journalYear)) {
+        const journal = [];
+        if (e.journalName) journal.push("*" + mdEscape(e.journalName) + "*");
+        if (e.journalVolume) journal.push(mdEscape(e.journalVolume) + (e.journalNumber ? "(" + mdEscape(e.journalNumber) + ")" : ""));
+        else if (e.journalNumber) journal.push("no. " + mdEscape(e.journalNumber));
+        if (e.journalYear) journal.push(mdEscape(e.journalYear));
+        lines.push(journal.join(", "));
+      }
+
+      // Composition year (for books)
+      if (e.entryType !== "article" && e.compositionYearRange) {
+        lines.push("Composed: " + mdEscape(e.compositionYearRange));
+      }
+
+      // Edition / translation
+      if (e.editionTranslation) {
+        lines.push("Edition: " + mdEscape(e.editionTranslation));
+      }
+
+      // Subject periods (eras the work engages with)
+      if (Array.isArray(e.subjectPeriods) && e.subjectPeriods.length) {
+        const labels = e.subjectPeriods.map(function (p) { return mdEscape(p.label || ""); }).filter(Boolean);
+        if (labels.length) lines.push("Engages: " + labels.join("; "));
+      }
+
+      // Subject tags
+      if (Array.isArray(e.subjectTags) && e.subjectTags.length) {
+        const labels = e.subjectTags.map(function (t) { return mdEscape(t.period || ""); }).filter(Boolean);
+        if (labels.length) lines.push("Tags: " + labels.join(" / "));
+      }
+
+      // Added-to-log date
+      if (e.createdAt) lines.push("_Added " + formatExportDate(e.createdAt) + "_");
+
+      // Spacing between entries (skip after the last)
+      if (i < entries.length - 1) {
+        lines.push("");
+        lines.push("---");
+        lines.push("");
+      }
+    });
+
+    return lines.join("\n");
+  }
+
+  /** Build the "Full notebook" markdown — log + general notes + marginalia. */
+  function buildNotebookMd(entries) {
+    const lines = [];
+    lines.push("# Notebook");
+    lines.push("");
+    lines.push("_Exported " + formatExportDate(new Date()) + " from Read to Remember._");
+    lines.push("");
+    lines.push("---");
+    lines.push("");
+
+    if (entries.length === 0) {
+      lines.push("_No entries._");
+      return lines.join("\n");
+    }
+
+    entries.forEach(function (e, i) {
+      const title = mdEscape(e.title || "Untitled");
+      const credit = mdEscape(e.primaryCredit || "");
+      const role = e.creditRole && e.creditRole !== "author" ? " (" + mdEscape(e.creditRole) + ")" : "";
+
+      // Heading
+      if (e.entryType === "article") {
+        lines.push("## " + title);
+      } else {
+        lines.push("## *" + title + "*");
+      }
+      lines.push("");
+
+      // Bibliographic block
+      if (credit) lines.push("**" + credit + "**" + role + "  ");
+      if (e.entryType === "article" && (e.journalName || e.journalYear)) {
+        const journal = [];
+        if (e.journalName) journal.push("*" + mdEscape(e.journalName) + "*");
+        if (e.journalVolume) journal.push(mdEscape(e.journalVolume) + (e.journalNumber ? "(" + mdEscape(e.journalNumber) + ")" : ""));
+        else if (e.journalNumber) journal.push("no. " + mdEscape(e.journalNumber));
+        if (e.journalYear) journal.push(mdEscape(e.journalYear));
+        lines.push(journal.join(", ") + "  ");
+      }
+      if (e.entryType !== "article" && e.compositionYearRange) {
+        lines.push("Composed: " + mdEscape(e.compositionYearRange) + "  ");
+      }
+      if (e.editionTranslation) {
+        lines.push("Edition: " + mdEscape(e.editionTranslation) + "  ");
+      }
+      if (Array.isArray(e.subjectPeriods) && e.subjectPeriods.length) {
+        const labels = e.subjectPeriods.map(function (p) { return mdEscape(p.label || ""); }).filter(Boolean);
+        if (labels.length) lines.push("Engages: " + labels.join("; ") + "  ");
+      }
+      if (Array.isArray(e.subjectTags) && e.subjectTags.length) {
+        const labels = e.subjectTags.map(function (t) { return mdEscape(t.period || ""); }).filter(Boolean);
+        if (labels.length) lines.push("Tags: " + labels.join(" / ") + "  ");
+      }
+      if (e.createdAt) lines.push("_Added " + formatExportDate(e.createdAt) + "_");
+
+      // General notes
+      if (e.generalNotes) {
+        lines.push("");
+        lines.push("### Notes");
+        lines.push("");
+        lines.push(e.generalNotes);  // user prose — preserve as-is
+      }
+
+      // Marginalia, sorted by page (numeric), then by kind for stability
+      if (Array.isArray(e.marginalia) && e.marginalia.length) {
+        lines.push("");
+        lines.push("### Marginalia");
+        lines.push("");
+        const sorted = e.marginalia.slice().sort(function (a, b) {
+          const ap = parseFloat(a.page); const bp = parseFloat(b.page);
+          const aNum = !isNaN(ap); const bNum = !isNaN(bp);
+          if (aNum && bNum) return ap - bp;
+          if (aNum) return -1;
+          if (bNum) return 1;
+          return String(a.page || "").localeCompare(String(b.page || ""));
+        });
+        sorted.forEach(function (m) {
+          const pageLabel = m.page ? "p. " + m.page : "";
+          const kind = m.kind || "note";
+          if (kind === "quote") {
+            // Block quote, attributed with page number
+            const quoteText = String(m.text || "").split("\n").map(function (ln) { return "> " + ln; }).join("\n");
+            lines.push(quoteText + (pageLabel ? "  \n> — " + pageLabel : ""));
+          } else {
+            // Note / question / ref — prefix in italics
+            const kindLabel = kind.charAt(0).toUpperCase() + kind.slice(1);
+            const prefix = "*" + kindLabel + (pageLabel ? ", " + pageLabel : "") + ":*";
+            lines.push(prefix + " " + (m.text || ""));
+          }
+          if (m.childNote) {
+            lines.push("");
+            lines.push("    " + m.childNote.split("\n").join("\n    "));
+          }
+          lines.push("");
+        });
+      }
+
+      // Separator between entries
+      if (i < entries.length - 1) {
+        lines.push("");
+        lines.push("---");
+        lines.push("");
+      }
+    });
+
+    return lines.join("\n");
+  }
+
+  /** Trigger a browser download of `text` as `filename`. */
+  function downloadTextFile(filename, text) {
+    const blob = new Blob([text], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    // Give the browser a moment to start the download before revoking.
+    setTimeout(function () { URL.revokeObjectURL(url); }, 100);
+  }
+
+  /** Main entry point — wired to the two export buttons. */
+  async function exportEntries(mode) {
+    try {
+      const entries = await loadEntries();
+      if (!Array.isArray(entries) || entries.length === 0) {
+        alert("No entries to export yet.");
+        return;
+      }
+      // Reverse chronological by createdAt (most recent first).
+      const sorted = entries.slice().sort(function (a, b) {
+        const at = new Date(a.createdAt || 0).getTime();
+        const bt = new Date(b.createdAt || 0).getTime();
+        return bt - at;
+      });
+      const md = (mode === "notebook")
+        ? buildNotebookMd(sorted)
+        : buildReadingLogMd(sorted);
+      const stem = (mode === "notebook") ? "r2r-notebook-" : "r2r-reading-log-";
+      downloadTextFile(stem + todayForFilename() + ".md", md);
+    } catch (err) {
+      console.error("exportEntries:", err);
+      alert("Sorry, the export failed. Check the console for details.");
+    }
   }
 
   // ── Subject-end hybrid controls ─────────────────────────────────────────────
@@ -1957,6 +2228,8 @@
 
   async function refreshList() {
     const entries = await loadEntries(); entriesList.innerHTML = ""; emptyState.hidden = entries.length > 0;
+    const exportControls = document.getElementById("export-controls");
+    if (exportControls) exportControls.hidden = entries.length === 0;
     entries.forEach(function (entry) { entriesList.appendChild(renderEntry(entry)); });
   }
 
@@ -1967,6 +2240,12 @@
     detailsToggle.setAttribute("aria-expanded", open ? "true" : "false");
     detailsToggle.textContent = open ? "\u2212 Hide additional details" : "+ Additional details";
   });
+
+  // Export buttons
+  const exportLogBtn = document.getElementById("export-log-btn");
+  const exportNotebookBtn = document.getElementById("export-notebook-btn");
+  if (exportLogBtn)      exportLogBtn.addEventListener("click",      function () { exportEntries("log"); });
+  if (exportNotebookBtn) exportNotebookBtn.addEventListener("click", function () { exportEntries("notebook"); });
 
   saveWithoutAiBtn.addEventListener("click", async function() { await savePlainFromPending(); });
 
