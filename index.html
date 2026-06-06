@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Read to Remember — Reading Log</title>
+  <title>r2r</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;0,6..72,700;1,6..72,400&family=Source+Sans+3:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet" />
@@ -558,9 +558,28 @@
     <button type="button" class="auth-bar-signout" id="auth-signout-btn">Sign out</button>
   </div>
   <header>
-    <h1 class="site-title">Read to Remember</h1>
-    <p class="tagline">A personal reading log — saved in your browser.</p>
+    <h1 class="site-title">r2r</h1>
+    <p class="tagline">reading log.</p>
   </header>
+
+  <!-- Currently Reading -->
+  <section id="currently-reading" hidden style="margin-bottom:2.5rem;">
+    <div class="card">
+      <h2 class="form-title" style="margin-bottom:0.5rem;">Currently reading</h2>
+      <p id="currently-reading-week" style="font-size:0.8rem;color:var(--muted);margin:0 0 1rem;"></p>
+      <ul id="currently-reading-list" style="list-style:none;margin:0;padding:0;"></ul>
+      <p id="currently-reading-general" style="font-size:0.85rem;color:var(--muted);margin:1rem 0 0;font-style:italic;border-top:1px solid var(--border);padding-top:0.75rem;display:none;"></p>
+    </div>
+  </section>
+
+  <!-- Pending Entries -->
+  <section id="pending-entries-section" hidden style="margin-bottom:2.5rem;">
+    <div class="card">
+      <h2 class="form-title" style="margin-bottom:0.25rem;">New titles to confirm</h2>
+      <p style="font-size:0.85rem;color:var(--muted);margin:0 0 1.25rem;line-height:1.5;">You mentioned these in a recent check-in. Add them to your log?</p>
+      <div id="pending-entries-list"></div>
+    </div>
+  </section>
 
   <section class="card" aria-labelledby="form-heading">
     <h2 id="form-heading" class="form-title">Log an entry</h2>
@@ -796,7 +815,7 @@
 
 <div id="auth-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title">
   <div class="modal-dialog">
-    <h2 id="auth-modal-title" style="font-family:var(--font-heading);font-size:1.2rem;font-weight:600;margin:0 0 0.35rem;">Read to Remember</h2>
+    <h2 id="auth-modal-title" style="font-family:var(--font-heading);font-size:1.2rem;font-weight:600;margin:0 0 0.35rem;">r2r</h2>
     <p class="modal-note" id="auth-modal-note">Sign in to your account, or create one if this is your first time.</p>
     <form id="auth-form" novalidate>
       <label for="auth-email-input" class="visually-hidden">Email address</label>
@@ -2711,6 +2730,105 @@
     ttEl.setAttribute("hidden", "");
   }
 
+  // ── Currently Reading ────────────────────────────────────────────────────
+  async function loadCurrentlyReading() {
+    if (!currentUser) return;
+    const { data, error } = await sb
+      .from("weekly_logs")
+      .select("data, created_at")
+      .eq("user_id", currentUser.id)
+      .order("created_at", { ascending: false })
+      .limit(1);
+    if (error || !data || data.length === 0) return;
+    const raw = data[0].data;
+    const log = typeof raw === "string" ? JSON.parse(raw) : raw;
+    const titles = log.titles || [];
+    if (titles.length === 0) return;
+    const notes = log.notes || {};
+    const generalNotes = log.generalNotes || "";
+    const weekDate = new Date(data[0].created_at).toLocaleDateString("en-CA", { year: "numeric", month: "long", day: "numeric" });
+    document.getElementById("currently-reading-week").textContent = "Week of " + weekDate;
+    const listEl = document.getElementById("currently-reading-list");
+    listEl.innerHTML = "";
+    titles.forEach(function(title, i) {
+      const li = document.createElement("li");
+      li.style.cssText = "padding:0.7rem 0;" + (i < titles.length - 1 ? "border-bottom:1px solid var(--border);" : "");
+      const t = document.createElement("p");
+      t.style.cssText = "font-family:var(--font-heading);font-size:1.05rem;font-weight:600;margin:0" + (notes[title] ? " 0 0.3rem" : "") + ";";
+      t.textContent = title;
+      li.appendChild(t);
+      if (notes[title]) {
+        const n = document.createElement("p");
+        n.style.cssText = "font-size:0.88rem;color:var(--muted);margin:0;line-height:1.5;";
+        n.textContent = notes[title];
+        li.appendChild(n);
+      }
+      listEl.appendChild(li);
+    });
+    if (generalNotes) {
+      const g = document.getElementById("currently-reading-general");
+      g.textContent = generalNotes;
+      g.style.display = "block";
+    }
+    document.getElementById("currently-reading").hidden = false;
+  }
+
+  // ── Pending Entries ──────────────────────────────────────────────────────
+  async function checkPendingEntries() {
+    if (!currentUser) return;
+    const { data, error } = await sb
+      .from("pending_entries")
+      .select("*")
+      .eq("user_id", currentUser.id)
+      .eq("status", "pending");
+    if (error || !data || data.length === 0) return;
+    const section = document.getElementById("pending-entries-section");
+    const listEl = document.getElementById("pending-entries-list");
+    listEl.innerHTML = "";
+    data.forEach(function(row) {
+      const raw = row.data;
+      const entry = typeof raw === "string" ? JSON.parse(raw) : raw;
+      const newTitles = entry.possiblyNewTitles || [];
+      newTitles.forEach(function(title) {
+        const div = document.createElement("div");
+        div.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:0.7rem 0;border-bottom:1px solid var(--border);";
+        const titleEl = document.createElement("span");
+        titleEl.style.cssText = "font-family:var(--font-heading);font-size:1rem;font-weight:600;";
+        titleEl.textContent = title;
+        const btnRow = document.createElement("div");
+        btnRow.style.cssText = "display:flex;gap:0.5rem;flex-shrink:0;";
+        const addBtn = document.createElement("button");
+        addBtn.type = "button";
+        addBtn.textContent = "Add to log";
+        addBtn.style.cssText = "font-family:var(--font-body);font-size:0.82rem;font-weight:600;padding:0.35rem 0.75rem;background:var(--accent);color:var(--bg);border:none;border-radius:5px;cursor:pointer;";
+        addBtn.onclick = async function() {
+          document.getElementById("title").value = title;
+          document.querySelector("[data-type='book']").click();
+          document.getElementById("title").focus();
+          document.getElementById("title").scrollIntoView({ behavior: "smooth", block: "center" });
+          await sb.from("pending_entries").update({ status: "confirmed" }).eq("id", row.id);
+          div.remove();
+          if (listEl.children.length === 0) section.hidden = true;
+        };
+        const dismissBtn = document.createElement("button");
+        dismissBtn.type = "button";
+        dismissBtn.textContent = "Dismiss";
+        dismissBtn.style.cssText = "font-family:var(--font-body);font-size:0.82rem;padding:0.35rem 0.75rem;background:transparent;color:var(--muted);border:1px solid var(--border);border-radius:5px;cursor:pointer;";
+        dismissBtn.onclick = async function() {
+          await sb.from("pending_entries").update({ status: "rejected" }).eq("id", row.id);
+          div.remove();
+          if (listEl.children.length === 0) section.hidden = true;
+        };
+        btnRow.appendChild(addBtn);
+        btnRow.appendChild(dismissBtn);
+        div.appendChild(titleEl);
+        div.appendChild(btnRow);
+        listEl.appendChild(div);
+      });
+    });
+    if (listEl.children.length > 0) section.hidden = false;
+  }
+
   // ── Auth state management ─────────────────────────────────────────────────
 
   // ── Auth state management ─────────────────────────────────────────────────
@@ -2725,6 +2843,8 @@
     await migrateLocalEntries();
     await refreshList();
     buildTimeline();
+    await loadCurrentlyReading();
+    await checkPendingEntries();
   }
 
   function onSignedOut() {
@@ -2737,6 +2857,8 @@
     entriesList.innerHTML = "";
     emptyState.hidden = false;
     buildTimeline();
+    document.getElementById("currently-reading").hidden = true;
+    document.getElementById("pending-entries-section").hidden = true;
   }
 
   // Only listen for explicit SIGNED_OUT — everything else is handled by getSession() below
