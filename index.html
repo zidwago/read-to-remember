@@ -535,6 +535,18 @@
     .tl-tt-value { color: var(--text); font-size: 0.78rem; text-align: right; }
     .tl-tt-tag { color: var(--accent); font-size: 0.75rem; margin-top: 0.3rem; }
 
+    /* ── Currently reading editor ── */
+    .cr-header { display:flex; align-items:center; justify-content:space-between; gap:1rem; }
+    .cr-edit-row { background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:0.65rem 0.75rem; margin-bottom:0.5rem; }
+    .cr-edit-row-top { display:flex; align-items:center; gap:0.5rem; margin-bottom:0.4rem; }
+    .cr-edit-title { flex:1; width:100%; padding:0.45rem 0.6rem; font-family:var(--font-body); font-size:0.95rem; color:var(--text); background:var(--surface); border:1px solid var(--border); border-radius:5px; }
+    .cr-edit-title:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 2px rgba(196,165,116,0.2); }
+    .cr-edit-remove { font-family:var(--font-body); font-size:1.0rem; line-height:1; padding:0.3rem 0.5rem; color:var(--muted); background:transparent; border:1px solid var(--border); border-radius:5px; cursor:pointer; flex-shrink:0; }
+    .cr-edit-remove:hover { color:#e8a598; border-color:#e8a598; }
+    .cr-edit-notes { width:100%; padding:0.4rem 0.6rem; font-family:var(--font-body); font-size:0.88rem; color:var(--muted); background:var(--surface); border:1px solid var(--border); border-radius:5px; resize:vertical; min-height:3rem; margin-top:0.35rem; }
+    .cr-edit-notes:focus { outline:none; border-color:var(--accent); color:var(--text); }
+    .cr-edit-actions { display:flex; align-items:center; gap:0.75rem; margin-top:1rem; padding-top:0.9rem; border-top:1px solid var(--border); }
+
     /* ── Auth status bar ── */
     .auth-bar {
       display: flex; align-items: center; gap: 0.65rem;
@@ -565,10 +577,31 @@
   <!-- Currently Reading -->
   <section id="currently-reading" hidden style="margin-bottom:2.5rem;">
     <div class="card">
-      <h2 class="form-title" style="margin-bottom:0.5rem;">Currently reading</h2>
-      <p id="currently-reading-week" style="font-size:0.8rem;color:var(--muted);margin:0 0 1rem;"></p>
-      <ul id="currently-reading-list" style="list-style:none;margin:0;padding:0;"></ul>
-      <p id="currently-reading-general" style="font-size:0.85rem;color:var(--muted);margin:1rem 0 0;font-style:italic;border-top:1px solid var(--border);padding-top:0.75rem;display:none;"></p>
+      <div class="cr-header">
+        <h2 class="form-title" style="margin-bottom:0;">Currently reading</h2>
+        <button type="button" id="cr-edit-btn" class="entry-edit-btn">Edit</button>
+      </div>
+      <!-- View mode -->
+      <ul id="cr-list" style="list-style:none;margin:0.75rem 0 0;padding:0;"></ul>
+      <p id="cr-empty" style="font-size:0.9rem;color:var(--muted);margin:0.75rem 0 0;display:none;">No active reading — add titles via Edit, or mention them in a weekly check-in.</p>
+      <!-- Edit mode -->
+      <div id="cr-edit-panel" hidden>
+        <div id="cr-edit-list" style="margin-top:0.75rem;"></div>
+        <button type="button" id="cr-add-btn" class="btn-add-marginalia" style="margin-top:0.65rem;">+ Add title</button>
+        <div class="cr-edit-actions">
+          <button type="button" id="cr-save-btn" class="btn-primary">Save</button>
+          <button type="button" id="cr-cancel-btn" class="btn-cancel-edit">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Recently Read -->
+  <section id="recently-read" hidden style="margin-bottom:2.5rem;">
+    <div class="card">
+      <h2 class="form-title" style="margin-bottom:0.5rem;">Recently read</h2>
+      <ul id="rr-list" style="list-style:none;margin:0;padding:0;"></ul>
+      <button type="button" id="rr-show-all-btn" hidden class="details-toggle" style="margin-top:0.75rem;"></button>
     </div>
   </section>
 
@@ -2731,46 +2764,232 @@
   }
 
   // ── Currently Reading ────────────────────────────────────────────────────
-  async function loadCurrentlyReading() {
+
+  let _crItems = [];   // cache of active currently_reading rows
+
+  /** Move active entries not mentioned in 4+ weeks to status "auto". */
+  async function autoArchiveStaleEntries() {
     if (!currentUser) return;
-    const { data, error } = await sb
-      .from("weekly_logs")
-      .select("data, created_at")
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 28);
+    const { error } = await sb.from("currently_reading")
+      .update({ status: "auto", moved_at: new Date().toISOString(), moved_reason: "Not mentioned in 4 weeks" })
       .eq("user_id", currentUser.id)
-      .order("created_at", { ascending: false })
-      .limit(1);
-    if (error || !data || data.length === 0) return;
-    const raw = data[0].data;
-    const log = typeof raw === "string" ? JSON.parse(raw) : raw;
-    const titles = log.titles || [];
-    if (titles.length === 0) return;
-    const notes = log.notes || {};
-    const generalNotes = log.generalNotes || "";
-    const weekDate = new Date(data[0].created_at).toLocaleDateString("en-CA", { year: "numeric", month: "long", day: "numeric" });
-    document.getElementById("currently-reading-week").textContent = "Week of " + weekDate;
-    const listEl = document.getElementById("currently-reading-list");
+      .eq("status", "active")
+      .lt("last_mentioned_at", cutoff.toISOString());
+    if (error) console.warn("autoArchiveStaleEntries:", error.message);
+  }
+
+  /** Render the view-mode list from _crItems. */
+  function renderCrList(items) {
+    const listEl = document.getElementById("cr-list");
+    const emptyEl = document.getElementById("cr-empty");
     listEl.innerHTML = "";
-    titles.forEach(function(title, i) {
+    if (!items || items.length === 0) {
+      emptyEl.style.display = "block";
+      return;
+    }
+    emptyEl.style.display = "none";
+    items.forEach(function(item, i) {
       const li = document.createElement("li");
-      li.style.cssText = "padding:0.7rem 0;" + (i < titles.length - 1 ? "border-bottom:1px solid var(--border);" : "");
+      li.style.cssText = "padding:0.7rem 0;" + (i < items.length - 1 ? "border-bottom:1px solid var(--border);" : "");
       const t = document.createElement("p");
-      t.style.cssText = "font-family:var(--font-heading);font-size:1.05rem;font-weight:600;margin:0" + (notes[title] ? " 0 0.3rem" : "") + ";";
-      t.textContent = title;
+      t.style.cssText = "font-family:var(--font-heading);font-size:1.05rem;font-weight:600;margin:0" + (item.notes ? " 0 0.25rem" : "") + ";";
+      t.textContent = item.title;
       li.appendChild(t);
-      if (notes[title]) {
+      if (item.notes) {
         const n = document.createElement("p");
         n.style.cssText = "font-size:0.88rem;color:var(--muted);margin:0;line-height:1.5;";
-        n.textContent = notes[title];
+        n.textContent = item.notes;
         li.appendChild(n);
       }
       listEl.appendChild(li);
     });
-    if (generalNotes) {
-      const g = document.getElementById("currently-reading-general");
-      g.textContent = generalNotes;
-      g.style.display = "block";
+  }
+
+  /** Append one editable row to the cr-edit-list. id="" for new rows. */
+  function appendCrEditRow(id, title, notes) {
+    const editList = document.getElementById("cr-edit-list");
+    const row = document.createElement("div");
+    row.className = "cr-edit-row";
+    row.setAttribute("data-cr-id", id || "");
+
+    const top = document.createElement("div");
+    top.className = "cr-edit-row-top";
+
+    const titleInp = document.createElement("input");
+    titleInp.type = "text"; titleInp.value = title || "";
+    titleInp.placeholder = "Title"; titleInp.className = "cr-edit-title";
+    titleInp.setAttribute("autocomplete", "off");
+
+    const rmBtn = document.createElement("button");
+    rmBtn.type = "button"; rmBtn.className = "cr-edit-remove";
+    rmBtn.setAttribute("aria-label", "Remove"); rmBtn.textContent = "×";
+    rmBtn.onclick = function() { row.remove(); };
+
+    top.appendChild(titleInp); top.appendChild(rmBtn);
+
+    const notesInp = document.createElement("textarea");
+    notesInp.value = notes || "";
+    notesInp.placeholder = "Notes (optional)";
+    notesInp.className = "cr-edit-notes";
+    notesInp.rows = 2;
+
+    row.appendChild(top);
+    row.appendChild(notesInp);
+    editList.appendChild(row);
+  }
+
+  function enterCrEditMode() {
+    document.getElementById("cr-list").hidden = true;
+    document.getElementById("cr-empty").style.display = "none";
+    document.getElementById("cr-edit-btn").hidden = true;
+    document.getElementById("cr-edit-panel").hidden = false;
+    const editList = document.getElementById("cr-edit-list");
+    editList.innerHTML = "";
+    _crItems.forEach(function(item) { appendCrEditRow(item.id, item.title, item.notes); });
+  }
+
+  function exitCrEditMode() {
+    document.getElementById("cr-list").hidden = false;
+    document.getElementById("cr-edit-btn").hidden = false;
+    document.getElementById("cr-edit-panel").hidden = true;
+  }
+
+  async function saveCrEdit() {
+    const saveBtn = document.getElementById("cr-save-btn");
+    saveBtn.disabled = true;
+    saveBtn.textContent = "Saving…";
+
+    const rows = document.getElementById("cr-edit-list").querySelectorAll(".cr-edit-row");
+    const edited = [];
+    rows.forEach(function(row) {
+      const id    = row.getAttribute("data-cr-id");
+      const title = row.querySelector(".cr-edit-title").value.trim();
+      const notes = row.querySelector(".cr-edit-notes").value.trim();
+      if (!title) return;
+      edited.push({ id: id || "", title, notes, isNew: !id });
+    });
+
+    // Rows that existed before but are no longer in the edit list → abandon
+    const editedIds = edited.filter(function(r) { return !r.isNew; }).map(function(r) { return r.id; });
+    const removed   = _crItems.filter(function(item) { return editedIds.indexOf(item.id) === -1; });
+    for (const item of removed) {
+      const { error } = await sb.from("currently_reading")
+        .update({ status: "abandoned", moved_at: new Date().toISOString(), moved_reason: "Removed from list" })
+        .eq("id", item.id).eq("user_id", currentUser.id);
+      if (error) console.warn("saveCrEdit abandon:", error.message);
     }
+
+    // Upsert updated / new rows
+    for (const item of edited) {
+      if (item.isNew) {
+        const { error } = await sb.from("currently_reading").insert({
+          id: newId(),
+          user_id: currentUser.id,
+          title: item.title,
+          notes: item.notes,
+          added_at: new Date().toISOString(),
+          last_mentioned_at: new Date().toISOString(),
+          status: "active"
+        });
+        if (error) console.warn("saveCrEdit insert:", error.message);
+      } else {
+        const { error } = await sb.from("currently_reading")
+          .update({ title: item.title, notes: item.notes })
+          .eq("id", item.id).eq("user_id", currentUser.id);
+        if (error) console.warn("saveCrEdit update:", error.message);
+      }
+    }
+
+    saveBtn.disabled = false;
+    saveBtn.textContent = "Save";
+    exitCrEditMode();
+    await loadCurrentlyReading();
+  }
+
+  async function loadCurrentlyReading() {
+    if (!currentUser) return;
+
+    await autoArchiveStaleEntries();
+
+    const { data, error } = await sb.from("currently_reading")
+      .select("*")
+      .eq("user_id", currentUser.id)
+      .eq("status", "active")
+      .order("added_at", { ascending: true });
+
+    _crItems = (!error && data) ? data : [];
+    renderCrList(_crItems);
     document.getElementById("currently-reading").hidden = false;
+
+    await loadRecentlyRead();
+  }
+
+  // Wire edit-mode buttons (safe to call multiple times — checks for existing listeners via flag)
+  (function wireCrButtons() {
+    document.getElementById("cr-edit-btn").addEventListener("click", enterCrEditMode);
+    document.getElementById("cr-cancel-btn").addEventListener("click", function() {
+      exitCrEditMode();
+      renderCrList(_crItems);
+    });
+    document.getElementById("cr-save-btn").addEventListener("click", saveCrEdit);
+    document.getElementById("cr-add-btn").addEventListener("click", function() { appendCrEditRow("", "", ""); });
+  })();
+
+  // ── Recently Read ─────────────────────────────────────────────────────────
+
+  async function loadRecentlyRead() {
+    if (!currentUser) return;
+    const { data, error } = await sb.from("currently_reading")
+      .select("*")
+      .eq("user_id", currentUser.id)
+      .neq("status", "active")
+      .order("moved_at", { ascending: false });
+
+    const section = document.getElementById("recently-read");
+    if (error || !data || data.length === 0) { section.hidden = true; return; }
+
+    const RR_DEFAULT = 5;
+    const listEl     = document.getElementById("rr-list");
+    const showAllBtn = document.getElementById("rr-show-all-btn");
+    let expanded = false;
+
+    function renderRr(expand) {
+      listEl.innerHTML = "";
+      const items = expand ? data : data.slice(0, RR_DEFAULT);
+      items.forEach(function(item, i) {
+        const li = document.createElement("li");
+        li.style.cssText = "padding:0.65rem 0;" + (i < items.length - 1 ? "border-bottom:1px solid var(--border);" : "");
+        const header = document.createElement("div");
+        header.style.cssText = "display:flex;align-items:baseline;justify-content:space-between;gap:0.75rem;";
+        const t = document.createElement("p");
+        t.style.cssText = "font-family:var(--font-heading);font-size:1.0rem;font-weight:600;margin:0;";
+        t.textContent = item.title;
+        const badge = document.createElement("span");
+        badge.style.cssText = "font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);flex-shrink:0;";
+        badge.textContent = item.status === "completed" ? "finished" : item.status === "abandoned" ? "put down" : "archived";
+        header.appendChild(t); header.appendChild(badge);
+        li.appendChild(header);
+        if (item.notes) {
+          const n = document.createElement("p");
+          n.style.cssText = "font-size:0.85rem;color:var(--muted);margin:0.2rem 0 0;line-height:1.5;";
+          n.textContent = item.notes;
+          li.appendChild(n);
+        }
+        listEl.appendChild(li);
+      });
+      if (data.length > RR_DEFAULT) {
+        showAllBtn.hidden = false;
+        showAllBtn.textContent = expand ? "− Show less" : "+ Show all (" + data.length + ")";
+      } else {
+        showAllBtn.hidden = true;
+      }
+    }
+
+    renderRr(false);
+    showAllBtn.onclick = function() { expanded = !expanded; renderRr(expanded); };
+    section.hidden = false;
   }
 
   // ── Pending Entries ──────────────────────────────────────────────────────
@@ -2843,12 +3062,13 @@
     await migrateLocalEntries();
     await refreshList();
     buildTimeline();
-    await loadCurrentlyReading();
+    await loadCurrentlyReading();   // also calls loadRecentlyRead() internally
     await checkPendingEntries();
   }
 
   function onSignedOut() {
     currentUser = null;
+    _crItems = [];
     authBar.hidden = true;
     authModal.style.display = "flex";
     authEmailInput.value = "";
@@ -2858,6 +3078,7 @@
     emptyState.hidden = false;
     buildTimeline();
     document.getElementById("currently-reading").hidden = true;
+    document.getElementById("recently-read").hidden = true;
     document.getElementById("pending-entries-section").hidden = true;
   }
 
