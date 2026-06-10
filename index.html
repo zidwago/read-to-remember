@@ -2308,7 +2308,7 @@
   addMarginaliaBtnEl.addEventListener("click", function () { appendMarginaleRow(null, marginaliaRows); });
 
   // Delegated removes (tags + marginalia)
-  document.querySelector(".card").addEventListener("click", function (ev) {
+  document.addEventListener("click", function (ev) {
     const tagRemove = ev.target.closest(".ai-tag-row-remove");
     if (tagRemove) { const row = tagRemove.closest(".ai-tag-row"); if (row) row.remove(); return; }
     const mRemove = ev.target.closest(".marginalia-remove");
